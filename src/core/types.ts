@@ -1,0 +1,217 @@
+// Sport-agnostic domain types shared by every sport module and the data layer.
+// Field names follow the MAASUAT [tms].Poomsae* tables where one exists, so the
+// backend can map them directly (see docs/API_CONTRACT.md).
+
+export type Side = 'chung' | 'hong';
+export type Role = 'judge' | 'operator' | 'referee' | 'display';
+
+export interface Athlete {
+  entryId: string; // TMSPlayerEntryID
+  name: string;
+  nat: string; // 3-letter country / club code
+  members?: string[]; // pair / team / family members
+}
+
+export type CompetitionFormat = 'PK' | 'CUTOFF';
+
+/** Lifecycle of one performance (PoomsaePerformance.Status). */
+export type PerformanceStatus =
+  | 'QUEUED' // in the ring's schedule
+  | 'CALLED' // operator called athletes to the mat
+  | 'ON_MAT' // athletes confirmed on mat
+  | 'OPEN' // scoring open, judges may tap and send
+  | 'COMPLETE' // every judge has sent
+  | 'WITH_RIC' // handed to chief referee
+  | 'RELEASED' // result published
+  | 'WITHDRAWN';
+
+export interface Performance {
+  id: string; // PerformanceID
+  matchNo: string;
+  ring: string;
+  category: string; // from TMSCategoryID
+  round: string;
+  format: CompetitionFormat;
+  form: string; // TMSFormID display name
+  formNo: number;
+  formCount: number;
+  chung: Athlete; // PK: blue corner. CUTOFF: the single entry.
+  hong?: Athlete; // PK only
+  status: PerformanceStatus;
+  roundId?: string; // CategoryRound this performance belongs to
+  clockSec: number;
+  clockRunning: boolean;
+}
+
+export interface JudgeAssignment {
+  assignmentId: string; // PoomsaeJudgeAssignment.AssignmentID
+  judgeNo: number;
+  officialId: string; // TMSOfficialID
+  name: string;
+  nat: string;
+  online: boolean;
+}
+
+/** One immutable tap (PoomsaeScoreEvent). UNDO reverses an earlier TAP. */
+export interface ScoreEvent {
+  eventId: string;
+  clientRequestId: string;
+  performanceId: string;
+  judgeNo: number;
+  side: Side;
+  type: 'TAP' | 'UNDO';
+  deductionCode?: string; // ACC_01 / ACC_03
+  reversesEventId?: string;
+  at: string; // ISO time
+}
+
+export interface SideScore {
+  accuracy: number; // points, 1 decimal
+  criteria: number[]; // presentation criterion values in ruleset order
+  presentation: number;
+  total: number;
+}
+
+/** PoomsaeJudgeSubmission. */
+export interface JudgeSubmission {
+  submissionId: string;
+  performanceId: string;
+  judgeNo: number;
+  revision: number;
+  idempotencyKey: string;
+  receivedAt: string; // server time
+  sides: Partial<Record<Side, SideScore>>;
+}
+
+export interface SideResult {
+  final: number; // 4 decimals
+  presentation?: number; // mean presentation of the kept judges (tie-break input)
+  excludedHigh: number | null; // judgeNo
+  excludedLow: number | null;
+}
+
+/** PoomsaeRoundResult (provisional until released). */
+export interface RoundResult {
+  performanceId: string;
+  sides: Partial<Record<Side, SideResult>>;
+  winner: Side | 'TIE' | null;
+  released: boolean;
+  releasedAt: string | null;
+  trimMode: 'PENDING_APPROVAL' | 'APPROVED';
+}
+
+export type JudgeSendState = 'idle' | 'sending' | 'sent' | 'failed';
+
+// ---------------- Phases 1–3: setup ----------------
+
+export type Discipline = 'RECOGNIZED' | 'FREESTYLE';
+export type Division = 'Individual' | 'Pair' | 'Team';
+/** Category competition mode. PK_CUTOFF: Cut-off rounds first, PK from the round marked PK. */
+export type CategoryMode = 'CUTOFF' | 'PK' | 'PK_CUTOFF';
+export type RoundStatus = 'SETUP' | 'READY' | 'LIVE' | 'SCORED' | 'CONFIRMED';
+
+/** TMS category with its Poomsae settings. */
+export interface Category {
+  id: string;
+  tmsCategoryId: string; // TMSCategoryID
+  name: string;
+  discipline: Discipline;
+  division: Division;
+  mode: CategoryMode;
+}
+
+/** P_RoundForm */
+export interface RoundForm { formNo: number; tmsFormId: string; name: string }
+
+/** P_CategoryRound */
+export interface CategoryRound {
+  id: string;
+  categoryId: string;
+  name: string;
+  order: number;
+  format: CompetitionFormat;
+  ruleSetId: number;
+  judgeCount: number;
+  forms: RoundForm[];
+  /** Entries that advance; null for a final. */
+  advanceCount: number | null;
+  status: RoundStatus;
+  /** Chief referee's order for tied entries (resolveTie). */
+  tieOrder?: string[];
+}
+
+/** TMS official available to the ring. */
+export interface Official {
+  officialId: string; // TMSOfficialID
+  name: string;
+  nat: string;
+  licence: 'International' | 'National';
+  role: 'JUDGE' | 'REFEREE' | 'OPERATOR';
+}
+
+/** P_JudgeAssignment for one seat of the ring panel. */
+export interface PanelSeat {
+  judgeNo: number;
+  assignmentId: string;
+  officialId: string | null;
+  deviceName: string | null;
+  pairedAt: string | null;
+  pairingCode: string | null;
+  pairingExpiresAt: string | null;
+}
+
+export interface RingPanel {
+  ringId: string;
+  judgeCount: number;
+  seats: PanelSeat[]; // always 7 seats; the first judgeCount are active
+  chiefReferee: string; // officialId
+  operator: string; // officialId
+}
+
+// ---------------- Phases 5–7: results ----------------
+
+/** One released score of one entry for one form of a Cut-off round. */
+export interface EntryScore {
+  roundId: string;
+  entryId: string;
+  formNo: number;
+  final: number;
+  presentation: number;
+  performanceId: string;
+  releasedAt: string;
+}
+
+/** One PK bout of a round. */
+export interface Bout {
+  roundId: string;
+  performanceId: string;
+  matchNo: string;
+  order: number;
+  chung: Athlete;
+  hong: Athlete;
+  chungFinal: number | null;
+  hongFinal: number | null;
+  winner: Side | null;
+}
+
+/** P_Qualification */
+export interface Qualification {
+  roundId: string;
+  entryId: string;
+  rank: number;
+  qualified: boolean;
+  nextRoundId: string | null;
+  decidedBy: 'SCORE' | 'RIC';
+  confirmedAt: string;
+}
+
+/** P_AuditLog (append-only). */
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  area: 'SCORING' | 'RESULTS' | 'SETUP';
+  target: string;
+  detail?: string;
+}

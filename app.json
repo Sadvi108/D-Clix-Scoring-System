@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "D-Clix Scoring System",
+    "slug": "dclix-scoring-system",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.example.dclixscoring"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0e13",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.example.dclixscoring"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "DEFAULT"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0b0e13",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120
+        }
+      ]
+    ],
+    "scheme": "dclixscoring",
+    "backgroundColor": "#0b0e13",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
