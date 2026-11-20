@@ -24,6 +24,7 @@ npx expo start
 - **iOS Simulator:** press `i`. **Android emulator:** press `a`.
 - **Real phone/tablet:** install **Expo Go**, scan the QR code (same Wi-Fi as the laptop).
 - Installable build for the demo devices: see [docs/BUILD.md](docs/BUILD.md)
+- Wired (USB-C Ethernet) connection and USB keypad for judges: see [docs/DEVICE_CONNECTION.md](docs/DEVICE_CONNECTION.md)
   (`npm run build:android`, `npm run build:ios`, `npm run build:store`).
 
 Checks: `npx tsc --noEmit` and `npx expo lint`.

@@ -45,6 +45,8 @@ const PATHS: Record<string, string[]> = {
   award: ['M12 15a6 6 0 1 0 0-12 6 6 0 1 0 0 12', 'M8.5 14 7 21l5-3 5 3-1.5-7'],
   list: ['M9 6h11', 'M9 12h11', 'M9 18h11', 'M4 6h.01', 'M4 12h.01', 'M4 18h.01'],
   device: ['M7 3h10v18H7z', 'M11 18h2'],
+  cable: ['M7 9h10v4a5 5 0 0 1-10 0z', 'M9.5 9V4', 'M14.5 9V4', 'M12 18v3'],
+  keypad: ['M3 6h18v12H3z', 'M7 10h.01', 'M11 10h.01', 'M15 10h.01', 'M17 10h.01', 'M7 14h.01', 'M17 14h.01', 'M10 14h4'],
   link: ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
 };
 export type IconName = keyof typeof PATHS;
@@ -95,7 +97,7 @@ export function Button({ label, icon, variant = 'primary', size = 'md', disabled
 }
 
 // ---------- StatusPill ----------
-export type PillStatus = 'ready' | 'waiting' | 'sending' | 'sent' | 'failed' | 'online' | 'offline' | 'locked';
+export type PillStatus = 'ready' | 'waiting' | 'sending' | 'sent' | 'failed' | 'online' | 'wifi' | 'wired' | 'offline' | 'locked';
 const PILL: Record<PillStatus, { icon: IconName; label: string; tone: 'neutral' | 'ok' | 'warn' | 'alert' }> = {
   ready: { icon: 'pencil', label: 'Ready', tone: 'neutral' },
   waiting: { icon: 'clock', label: 'Waiting', tone: 'neutral' },
@@ -103,6 +105,8 @@ const PILL: Record<PillStatus, { icon: IconName; label: string; tone: 'neutral' 
   sent: { icon: 'check', label: 'Sent', tone: 'ok' },
   failed: { icon: 'alert', label: 'Not sent', tone: 'alert' },
   online: { icon: 'wifi', label: 'Connected', tone: 'ok' },
+  wifi: { icon: 'wifi', label: 'Wi-Fi', tone: 'ok' },
+  wired: { icon: 'cable', label: 'Wired', tone: 'ok' },
   offline: { icon: 'wifi-off', label: 'Offline', tone: 'alert' },
   locked: { icon: 'lock', label: 'Locked', tone: 'neutral' },
 };

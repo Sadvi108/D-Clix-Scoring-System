@@ -14,6 +14,11 @@ export class HttpScoringApi implements ScoringApi {
 
   constructor(private baseUrl: string) {}
 
+  /** Venue server address, set on the device (Device connection screen). Reconnect after changing it. */
+  setBaseUrl(url: string) {
+    this.baseUrl = url;
+  }
+
   subscribe = (l: () => void) => {
     this.listeners.add(l);
     return () => this.listeners.delete(l);

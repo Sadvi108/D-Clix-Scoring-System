@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useLinkPill } from '@/device/network';
 import type { Athlete, Side } from '@/core/types';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
@@ -8,6 +9,9 @@ export function MatchBar({ matchNo, ring, category, round, judgeNo, roleLabel, c
   onHome?: () => void; matchNo?: string; ring?: string; category: string; round?: string; judgeNo?: number; roleLabel?: string; connection?: PillStatus; draft?: boolean; compact?: boolean;
 }) {
   const { c } = useTheme();
+  // 'online' / 'sending' from a screen means "show this device's real link": Wired, Wi-Fi or Offline.
+  const live = useLinkPill(connection === 'sending');
+  const pill = connection === 'online' || connection === 'sending' ? live : connection;
   return (
     <View style={[styles.bar, { height: compact ? 48 : 64, backgroundColor: c.surface, borderBottomColor: c.hairline, paddingHorizontal: compact ? space[4] : space[5] }]}>
       <View style={[styles.side, { justifyContent: 'flex-start' }, compact && { flex: 0 }]}>
@@ -33,7 +37,7 @@ export function MatchBar({ matchNo, ring, category, round, judgeNo, roleLabel, c
             <Txt v="scoreMd" color="goldText" style={{ fontSize: compact ? 22 : 26 }}>{judgeNo}</Txt>
           </View>
         ) : roleLabel && !compact ? <Txt v="overline" color="inkMuted">{roleLabel}</Txt> : null}
-        {connection ? <StatusPill status={connection} compact={compact} /> : null}
+        {pill ? <StatusPill status={pill} compact={compact} /> : null}
       </View>
     </View>
   );

@@ -10,6 +10,7 @@ import { space } from '@/theme/tokens';
 import { AthletePlate, FormClock, MatchBar, mmss } from '@/ui/match';
 import { Button, Txt, f1 } from '@/ui/primitives';
 import { CriterionStepper, DeductionPad, SendButton } from '@/ui/scoring';
+import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { usePkSides, toggleSides } from './sideLayout';
 import { receiptTime, useJudge } from './useJudge';
 
@@ -18,7 +19,7 @@ export function ScoringPK() {
   useKeepAwake();
   const router = useRouter();
   const { c } = useTheme();
-  const { s, cur, chung, hong, locked, sendState, pressSend, correction } = useJudge();
+  const { s, cur, chung, hong, locked, sendState, pressSend, setArmed, correction } = useJudge();
   const { width, height } = useWindowDimensions();
   const compact = height < 560; // phone in landscape
   const [bodyH, setBodyH] = useState(0);
@@ -52,12 +53,25 @@ export function ScoringPK() {
     );
   };
 
+  // USB keypad: left column scores the athlete on the left of this screen, right column the right one.
+  const onKeypad = (a: KeypadAction) => {
+    if (a.kind === 'send') { if (sendState !== 'incomplete' && sendState !== 'sent' && sendState !== 'sending') pressSend(); return; }
+    if (a.kind === 'cancel') { setArmed(false); return; }
+    if (locked) return;
+    const side = a.pos === 'left' ? L : R;
+    const m = by(side);
+    if (a.kind === 'undo') { if (m.lastUndoLabel) api.undo(side); return; }
+    const d = a.kind === 'major' ? major : minor;
+    if (m.accT >= d.tenths) api.tap(side, d.code);
+  };
+
   const receipt = s.myDraft.receipt;
   const detail = sendState === 'sent' ? receiptTime(receipt?.receivedAt) : chung.total != null && hong.total != null ? `${f1(by(L).total)} · ${f1(by(R).total)}` : null;
   const label = sendState === 'ready' ? 'Send both scores' : sendState === 'incomplete' && compact ? 'Set every criterion' : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right', 'bottom']}>
+      <KeypadCapture onAction={onKeypad} />
       <MatchBar onHome={() => router.replace('/')} compact={compact} matchNo={cur.matchNo} ring={cur.ring} category={compact ? `${cur.category.replace('Male Under', 'Male U')} · ${cur.round.replace('Round of ', 'R')}` : cur.category} round={cur.round} judgeNo={s.me?.judgeNo} connection={s.connection === 'sending' ? 'sending' : 'online'} />
       <View style={[styles.plates, { paddingHorizontal: space[4], paddingTop: compact ? 6 : 12, gap }]}>
         <View style={{ flex: 1, minWidth: 0 }}><AthletePlate side={L} mirror={false} athlete={athlete(L)} accuracy={by(L).accuracy} presentation={by(L).presentation} compact={compact} /></View>

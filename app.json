@@ -9,7 +9,13 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": true,
-      "bundleIdentifier": "com.example.dclixscoring"
+      "bundleIdentifier": "com.example.dclixscoring",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connects to the scoring server on the venue network (wired or Wi-Fi).",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -39,6 +45,14 @@
           "backgroundColor": "#0b0e13",
           "image": "./assets/splash-icon.png",
           "imageWidth": 120
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

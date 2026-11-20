@@ -4,6 +4,7 @@ import { useFreeOrientation } from '@/hooks/useFreeOrientation';
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, useScoring } from '@/data';
+import { useLinkPill } from '@/device/network';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { Button, Icon, RuleBadge, StatusPill, Txt, type IconName } from '@/ui/primitives';
@@ -15,6 +16,7 @@ const ROLES: { href: Href; icon: IconName; title: string; who: string; device: s
   { href: '/scoreboard', icon: 'tv', title: 'Scoreboard', who: 'Released results for the venue screen', device: 'Tablet or TV' },
   { href: '/results', icon: 'award', title: 'Results', who: 'Standings, ties, qualification, medals and the audit log', device: 'Tablet' },
   { href: '/admin', icon: 'sliders', title: 'Competition setup', who: 'Rule sets, categories and rounds, judge panel and devices', device: 'Tablet' },
+  { href: '/connection', icon: 'cable', title: 'Device connection', who: 'Wired (USB-C) or Wi-Fi link, server address, USB keypad', device: 'Every device' },
 ];
 
 const STEPS = [
@@ -33,6 +35,7 @@ export default function Home() {
   const s = useScoring();
   const { width } = useWindowDimensions();
   const wide = width >= 700;
+  const link = useLinkPill();
 
   useFreeOrientation();
 
@@ -55,6 +58,7 @@ export default function Home() {
           <View style={{ gap: space[2], alignItems: wide ? 'flex-end' : 'flex-start' }}>
             <RuleBadge tone="draft" label="Prototype · sample data" />
             <StatusPill status="online" label={s.mode === 'mock' ? 'Demo server (on device)' : 'Connected'} />
+            <Pressable onPress={() => router.push('/connection')} accessibilityRole="button" accessibilityLabel="Device connection"><StatusPill status={link} /></Pressable>
           </View>
         </View>
 

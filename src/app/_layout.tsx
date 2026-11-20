@@ -11,9 +11,11 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { loadDeviceSettings } from '@/device/settings';
 import { palettes } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
+loadDeviceSettings();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

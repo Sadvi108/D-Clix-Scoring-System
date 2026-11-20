@@ -9,6 +9,7 @@ import { radius, space } from '@/theme/tokens';
 import { MatchBar, mmss } from '@/ui/match';
 import { Button, Icon, Txt, f1 } from '@/ui/primitives';
 import { CriterionStepper, DeductionPad, ScoreSummary, SendButton } from '@/ui/scoring';
+import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { receiptTime, useJudge } from './useJudge';
 
 /** One athlete (Cut-off, any entry type). On phones Send opens a review sheet that lists every figure. */
@@ -34,8 +35,20 @@ export function ScoringCutoff() {
     if (r.ok) setSheet('receipt');
   }
 
+  // USB keypad: either column scores the one athlete; Enter opens the review, Enter again sends.
+  const onKeypad = (a: KeypadAction) => {
+    if (sheet === 'review') { if (a.kind === 'send' && !sending) send(); else if (a.kind === 'cancel' && !sending) setSheet('closed'); return; }
+    if (sheet === 'receipt') { if (a.kind === 'send' || a.kind === 'cancel') setSheet('closed'); return; }
+    if (a.kind === 'send') { if (sendState !== 'incomplete' && sendState !== 'sent') setSheet('review'); return; }
+    if (a.kind === 'cancel' || locked) return;
+    if (a.kind === 'undo') { if (chung.lastUndoLabel) api.undo('chung'); return; }
+    const d = a.kind === 'major' ? major : minor;
+    if (chung.accT >= d.tenths) api.tap('chung', d.code);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
+      <KeypadCapture onAction={onKeypad} active={sheet === 'closed'} />
       <MatchBar onHome={() => router.replace('/')} compact={!wide} matchNo={cur.matchNo} ring={wide ? cur.ring : undefined} category={wide ? cur.category : cur.category.replace(' · Cut-off', '')} round={cur.round} judgeNo={s.me?.judgeNo} connection={wide ? 'online' : undefined} />
       <View style={[styles.who, { backgroundColor: c.chungSoft }]}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -93,6 +106,7 @@ export function ScoringCutoff() {
         <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => sheet === 'review' && !sending && setSheet('closed')} accessibilityLabel="Close" />
         <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.hairline, paddingBottom: insets.bottom + space[4] }, wide && { alignSelf: 'center', width: 560 }]}>
           <View style={[styles.grab, { backgroundColor: c.controlBorder }]} />
+          <KeypadCapture onAction={onKeypad} active={sheet !== 'closed'} />
           {sheet === 'receipt' ? (
             <View style={{ alignItems: 'center', gap: space[3] }}>
               <View style={[styles.okm, { backgroundColor: c.okSoft, borderColor: c.ok }]}><Icon name="check" size={34} stroke={2.5} color={c.okText} /></View>

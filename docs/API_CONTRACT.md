@@ -176,3 +176,7 @@ The snapshot adds `setup`, `results`, `audit` and `correction` (see `ScoringSnap
 `src/data/mock/seed.ts` holds the demo ring, five judges (demo PIN `1234` for every seat),
 four PK bouts and one Cut-off entry, plus the deterministic scores of the simulated judges.
 Use it as test fixtures when building the real endpoints.
+
+## Health check
+
+`GET /poomsae/health` → `200 { "ok": true }`, no auth. Used by the app's Device connection screen to test the wired or Wi-Fi link to the server.
