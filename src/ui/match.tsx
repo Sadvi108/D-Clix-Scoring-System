@@ -3,6 +3,7 @@ import { useLinkPill } from '@/device/network';
 import type { Athlete, Side } from '@/core/types';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
+import { flag } from './flag';
 import { Icon, RuleBadge, StatusPill, Txt, f1, type PillStatus } from './primitives';
 
 export function MatchBar({ matchNo, ring, category, round, judgeNo, roleLabel, connection, draft = true, compact, onHome }: {
@@ -84,6 +85,7 @@ export function AthletePlate({ side, athlete, tag, accuracy, presentation, compa
           <View style={[styles.tag, { backgroundColor: tagBg }]}>
             <Txt v="overline" color={tagFg} style={{ fontSize: 10 }}>{(tag ?? (side === 'solo' ? 'Entry' : side)).toUpperCase()}</Txt>
           </View>
+          {flag(athlete.nat) ? <Txt style={{ fontSize: compact ? 16 : 22, lineHeight: compact ? 20 : 26 }}>{flag(athlete.nat)}</Txt> : null}
           <Txt v="overline" color="inkMuted" style={{ fontSize: 12 }}>{athlete.nat}</Txt>
         </View>
         <Txt v="title" numberOfLines={1} style={{ textTransform: 'uppercase', fontSize: compact ? 15 : 21, lineHeight: compact ? 19 : 26 }}>{athlete.name}</Txt>

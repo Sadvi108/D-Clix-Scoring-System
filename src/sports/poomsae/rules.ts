@@ -34,11 +34,11 @@ export const RECOGNIZED_V1: RuleSet = {
     { code: 'ACC_01', label: 'Minor', tenths: 1 },
     { code: 'ACC_03', label: 'Major', tenths: 3 },
   ],
-  // Min 0.5 and step 0.1 follow the WT judge's score sheet; DB MinPoints/StepPoints are NULL (pending).
+  // 0.0–2.0 in 0.1 steps, as on the judge tablet manual; DB MinPoints/StepPoints are NULL (pending).
   criteria: [
-    { code: 'POWER_SPEED', label: 'Power & Speed', short: 'Power & Speed', minTenths: 5, maxTenths: 20, stepTenths: 1 },
-    { code: 'RHYTHM_TEMPO', label: 'Coordination of Rhythm & Tempo and Softness & Power', short: 'Rhythm & Tempo', sub: 'Softness & Power', minTenths: 5, maxTenths: 20, stepTenths: 1 },
-    { code: 'ENERGY', label: 'Expression of Energy', short: 'Expression of Energy', minTenths: 5, maxTenths: 20, stepTenths: 1 },
+    { code: 'POWER_SPEED', label: 'Speed & Power', short: 'Speed & Power', minTenths: 0, maxTenths: 20, stepTenths: 1 },
+    { code: 'RHYTHM_TEMPO', label: 'Rhythm / Tempo / Softness / Power', short: 'Rhythm / Tempo', sub: 'Softness / Power', minTenths: 0, maxTenths: 20, stepTenths: 1 },
+    { code: 'ENERGY', label: 'Expression of Energy', short: 'Expression of Energy', minTenths: 0, maxTenths: 20, stepTenths: 1 },
   ],
   judgeCounts: [3, 5, 7],
   defaultJudges: 5,
@@ -51,8 +51,8 @@ const fs = (code: string, label: string, short: string, group: 'TECHNICAL' | 'PR
   ({ code, label, short, sub, group, minTenths: 0, maxTenths: 10, stepTenths: 1 });
 
 /**
- * Freestyle: Technical skills 6.0 + Presentation 4.0, Cut-off only. Judges score every item; there are no tap deductions.
- * Items follow the WT Freestyle score sheet (each 0.0–1.0, step 0.1). DRAFT: confirm items and ranges before go-live.
+ * Freestyle: Technical skills 6.0 + Presentation 4.0, Cut-off only. Items as on the judge tablet manual (each 0.0–1.0,
+ * step 0.1). The judge also taps −0.3 / −0.1 deductions, taken off the total. DRAFT: confirm before go-live.
  */
 export const FREESTYLE_V1: RuleSet = {
   id: 2,
@@ -62,18 +62,21 @@ export const FREESTYLE_V1: RuleSet = {
   discipline: 'FREESTYLE',
   accuracyMaxTenths: 60,
   presentationMaxTenths: 40,
-  deductions: [],
+  deductions: [
+    { code: 'ACC_01', label: 'Minor', tenths: 1 },
+    { code: 'ACC_03', label: 'Major', tenths: 3 },
+  ],
   criteria: [
-    fs('FS_JUMP_SIDE', 'Height of jump side kick', 'Jump side kick', 'TECHNICAL', 'Height'),
-    fs('FS_JUMP_FRONT', 'Number of front kicks in one jump', 'Jump front kicks', 'TECHNICAL', 'Kicks in one jump'),
-    fs('FS_SPIN', 'Gradient of spin kick', 'Spin kick', 'TECHNICAL', 'Degree of rotation'),
-    fs('FS_CONSECUTIVE', 'Performance of consecutive kicks', 'Consecutive kicks', 'TECHNICAL'),
-    fs('FS_ACROBATIC', 'Acrobatic kicks', 'Acrobatic kicks', 'TECHNICAL'),
-    fs('FS_BASIC', 'Basic movements and practicability', 'Basic movements', 'TECHNICAL', 'Practicability'),
-    fs('FS_CREATIVITY', 'Creativity', 'Creativity', 'PRESENTATION'),
+    fs('FS_JUMP_SIDE', 'Height of Jump', 'Height of Jump', 'TECHNICAL'),
+    fs('FS_JUMP_FRONT', 'Jumping Kicks', 'Jumping Kicks', 'TECHNICAL'),
+    fs('FS_SPIN', 'Turn', 'Turn', 'TECHNICAL'),
+    fs('FS_CONSECUTIVE', 'Consecutive Kicks', 'Consecutive Kicks', 'TECHNICAL'),
+    fs('FS_ACROBATIC', 'Acrobatic', 'Acrobatic', 'TECHNICAL'),
+    fs('FS_BASIC', 'Basic', 'Basic', 'TECHNICAL'),
+    fs('FS_CREATIVITY', 'Creativeness', 'Creativeness', 'PRESENTATION'),
     fs('FS_HARMONY', 'Harmony', 'Harmony', 'PRESENTATION'),
-    fs('FS_ENERGY', 'Expression of energy', 'Expression of energy', 'PRESENTATION'),
-    fs('FS_MUSIC', 'Music and choreography', 'Music & choreography', 'PRESENTATION'),
+    fs('FS_ENERGY', 'Expression of Energy', 'Expression of Energy', 'PRESENTATION'),
+    fs('FS_MUSIC', 'Music & Choreography', 'Music & Choreography', 'PRESENTATION'),
   ],
   judgeCounts: [3, 5, 7],
   defaultJudges: 5,
@@ -86,4 +89,4 @@ export const isFreestyle = (r: RuleSet) => r.discipline === 'FREESTYLE';
 export const technicalCriteria = (r: RuleSet) => r.criteria.filter((c) => c.group === 'TECHNICAL');
 export const presentationCriteria = (r: RuleSet) => r.criteria.filter((c) => c.group !== 'TECHNICAL');
 
-export const isConfigured = (r: RuleSet) => r.criteria.length > 0 && (r.discipline === 'FREESTYLE' || r.deductions.length > 0);
+export const isConfigured = (r: RuleSet) => r.criteria.length > 0 && r.deductions.length > 0;

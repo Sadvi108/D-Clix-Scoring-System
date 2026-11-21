@@ -38,7 +38,7 @@ Checks: `npx tsc --noEmit` and `npx expo lint`.
    PK: Chung is blue (left) and Hong red (right) by default; the ⇄ button on the judge screen and
    the scoreboard swaps sides for that device. Scores stay with the athlete, not the screen side.
    Cut-off: one athlete at a time, always blue. Freestyle (match F-1, a pair) has its own screen:
-   6 technical-skill items (6.0) + 4 presentation items (4.0), no deduction keys.
+   6 technical-skill items (6.0) + 4 presentation items (4.0) scored in a number grid, plus −0.3 / −0.1 deduction keys taken off the total.
 3. **Chief referee** → panel complete (other judges are simulated) → optionally *Request correction*
    (pick a judge + reason; that judge re-sends revision 2) → Release.
 4. **Scoreboard** → released result with trimmed judges and the winner.

@@ -46,7 +46,7 @@ export class HttpScoringApi implements ScoringApi {
   autoSignIn = async (_seat: number): Promise<Result> => this.todo('autoSignIn (prototype only; turn off AUTO_SIGN_IN in src/config.ts)');
   signOut = () => this.todo('signOut');
   tap = async (_side: Side, _code: string) => this.todo('tap → POST /poomsae/event');
-  undo = async (_side: Side) => this.todo('undo → POST /poomsae/event');
+  undo = async (_side: Side, _deductionCode?: string) => this.todo('undo → POST /poomsae/event');
   setCriterion = (_side: Side, _i: number, _t: number | null) => this.todo('setCriterion (local draft)');
   submit = async (): Promise<Result> => this.todo('submit → POST /poomsae/score/submit');
   callPerformance = async (_id: string): Promise<Result> => this.todo('callPerformance');

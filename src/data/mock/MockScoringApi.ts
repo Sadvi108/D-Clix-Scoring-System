@@ -6,7 +6,7 @@
 import type { Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore } from '@/core/types';
 import { cutLineTie, cutoffStandings, medalTie, pairBouts, roundScored, boutWinner } from '@/sports/poomsae/ranking';
 import { FREESTYLE_V1, RECOGNIZED_V1, isConfigured, isFreestyle, type RuleSet } from '@/sports/poomsae/rules';
-import { accuracyTenths, activeTaps, aggregate, canDeduct, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
+import { accuracyTenths, activeTaps, aggregate, canDeduct, deductionTenths, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
 import type { DisplayMode, JudgeDraft, Result, RoundPatch, RuleSetPatch, ScoringApi, ScoringSnapshot } from '../ScoringApi';
 import {
   DEMO_PIN, DEMO_QR_CODE, SEED_AUDIT, SEED_BOUTS, SEED_CATEGORIES, SEED_ENTRIES, SEED_OFFICIALS, SEED_PANEL, SEED_QUEUE, SEED_ROUNDS, SEED_SCORES, SIM_SCORES,
@@ -24,7 +24,8 @@ const ON_MAT: Performance['status'][] = ['CALLED', 'ON_MAT', 'OPEN', 'COMPLETE',
 
 function emptyDraft(rules: RuleSet = RECOGNIZED_V1): JudgeDraft {
   const n = rules.criteria.length;
-  return { criteria: { chung: Array(n).fill(null), hong: Array(n).fill(null) }, sendState: 'idle', receipt: null };
+  // Every item starts at 0.0, as on the judge tablet.
+  return { criteria: { chung: Array(n).fill(0), hong: Array(n).fill(0) }, sendState: 'idle', receipt: null };
 }
 
 function judgesFrom(panel: RingPanel, officials: ScoringSnapshot['setup']['officials']): JudgeAssignment[] {
@@ -143,7 +144,7 @@ export class MockScoringApi implements ScoringApi {
   }
 
   async tap(side: Side, deductionCode: string) {
-    if (!this.judgeCanScore() || isFreestyle(this.s.rules)) return;
+    if (!this.judgeCanScore()) return;
     const me = this.s.me!;
     const acc = accuracyTenths(this.s.rules, activeTaps(this.s.myEvents, me.judgeNo, side));
     if (!canDeduct(this.s.rules, acc, deductionCode)) return;
@@ -151,10 +152,10 @@ export class MockScoringApi implements ScoringApi {
     this.set({ myEvents: [...this.s.myEvents, ev] }); // optimistic local append; server is idempotent on clientRequestId
   }
 
-  async undo(side: Side) {
+  async undo(side: Side, deductionCode?: string) {
     if (!this.judgeCanScore()) return;
     const me = this.s.me!;
-    const taps = activeTaps(this.s.myEvents, me.judgeNo, side);
+    const taps = activeTaps(this.s.myEvents, me.judgeNo, side).filter((t) => !deductionCode || t.deductionCode === deductionCode);
     const last = taps[taps.length - 1];
     if (!last) return;
     const ev: ScoreEvent = { eventId: id('EV'), clientRequestId: id('REQ'), performanceId: last.performanceId, judgeNo: me.judgeNo, side, type: 'UNDO', reversesEventId: last.eventId, at: now() };
@@ -172,6 +173,10 @@ export class MockScoringApi implements ScoringApi {
     if (pres == null) return null;
     const acc = isFreestyle(this.s.rules) ? technicalTenths(this.s.rules, criteria) : accuracyTenths(this.s.rules, activeTaps(events, judgeNo, side));
     if (acc == null) return null;
+    if (isFreestyle(this.s.rules)) {
+      const ded = deductionTenths(this.s.rules, activeTaps(events, judgeNo, side));
+      return { accuracy: acc / 10, criteria: (criteria as number[]).map((v) => v / 10), presentation: pres / 10, deduction: ded / 10, total: Math.max(0, acc + pres - ded) / 10 };
+    }
     return { accuracy: acc / 10, criteria: (criteria as number[]).map((v) => v / 10), presentation: pres / 10, total: (acc + pres) / 10 };
   }
 

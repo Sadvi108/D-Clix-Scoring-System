@@ -130,7 +130,7 @@ export default function Connection() {
                   <Txt v="body" style={{ flex: 1 }}>{m.action}</Txt>
                 </View>
               ))}
-              <Txt v="caption" color="inkMuted">Left keys score the athlete on the left of the judge&apos;s screen, so they follow the ⇄ side swap. Cut-off: both columns score the one athlete. Freestyle: only Enter and cancel.</Txt>
+              <Txt v="caption" color="inkMuted">Left keys score the athlete on the left of the judge&apos;s screen, so they follow the ⇄ side swap. Cut-off and Freestyle: both columns score the one athlete.</Txt>
             </Panel>
 
             <Panel>

@@ -7,11 +7,11 @@
 //
 //   7  −0.3 left      9  −0.3 right
 //   4  −0.1 left      6  −0.1 right
-//   1  undo left      3  undo right
-//   Enter  send (press twice to confirm, as on screen)
-//   0 / .  cancel (back out of confirm or the review sheet)
+//   1  undo left      3  undo right   (removes the last deduction of that athlete)
+//   Enter  send, or OK in the number grid
+//   0 / .  cancel (Close in the number grid)
 //
-// Cut-off has one athlete, so both columns score that athlete.
+// Cut-off and Freestyle have one athlete, so both columns score that athlete.
 import { useEffect, useRef, type ComponentRef } from 'react';
 import { Platform, StyleSheet, TextInput } from 'react-native';
 import { useDeviceSettings } from './settings';
@@ -25,8 +25,8 @@ export const KEYPAD_MAP: { keys: string; action: string }[] = [
   { keys: '7 / 9', action: '−0.3 major deduction (left / right athlete)' },
   { keys: '4 / 6', action: '−0.1 minor deduction (left / right athlete)' },
   { keys: '1 / 3', action: 'Undo last deduction (left / right athlete)' },
-  { keys: 'Enter', action: 'Send. Press again to confirm' },
-  { keys: '0  or  .', action: 'Cancel / back to scoring' },
+  { keys: 'Enter', action: 'Send score (OK in the number grid)' },
+  { keys: '0  or  .', action: 'Close the number grid or receipt' },
 ];
 
 export function keyToAction(key: string): KeypadAction | null {

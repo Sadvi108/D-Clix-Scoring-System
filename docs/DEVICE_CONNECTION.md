@@ -37,7 +37,7 @@ build change is needed, and it also works in Expo Go.
 | 7 / 9 | −0.3 major deduction, left / right athlete |
 | 4 / 6 | −0.1 minor deduction, left / right athlete |
 | 1 / 3 | Undo last deduction, left / right athlete |
-| Enter | Send (press twice to confirm, like the on-screen button) |
+| Enter | Send the score (OK in the number grid) |
 | 0 or . | Cancel: back out of confirm or the review sheet |
 
 - Left/right means the judge's screen, so the keys follow the ⇄ side swap in PK.

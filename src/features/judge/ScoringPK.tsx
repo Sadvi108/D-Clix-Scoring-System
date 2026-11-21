@@ -9,20 +9,25 @@ import { useTheme } from '@/theme/ThemeContext';
 import { space } from '@/theme/tokens';
 import { AthletePlate, FormClock, MatchBar, mmss } from '@/ui/match';
 import { Button, Txt, f1 } from '@/ui/primitives';
-import { CriterionStepper, DeductionPad, SendButton } from '@/ui/scoring';
+import { DeductionPad, ScoreChip, SendButton } from '@/ui/scoring';
+import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { usePkSides, toggleSides } from './sideLayout';
 import { receiptTime, useJudge } from './useJudge';
 
-/** Chung vs Hong on one landscape screen: Chung keys left, criteria centre, Hong keys right, Send bottom-centre. */
+/**
+ * Chung vs Hong on one landscape screen: deduction keys on each side (the round counter on a key removes one of that
+ * deduction), presentation in the centre (tap a value to open the number grid), Send bottom-centre (one press).
+ */
 export function ScoringPK() {
   useKeepAwake();
   const router = useRouter();
   const { c } = useTheme();
-  const { s, cur, chung, hong, locked, sendState, pressSend, setArmed, correction } = useJudge();
+  const { s, cur, chung, hong, locked, sendState, pressSend, correction } = useJudge();
   const { width, height } = useWindowDimensions();
   const compact = height < 560; // phone in landscape
   const [bodyH, setBodyH] = useState(0);
+  const [grid, setGrid] = useState<Side | null>(null);
   const { left: L, right: R, swapped } = usePkSides();
   if (!cur || !cur.hong) return null;
   const by = (sd: Side) => (sd === 'chung' ? chung : hong);
@@ -40,38 +45,29 @@ export function ScoringPK() {
     const m = side === 'chung' ? chung : hong;
     return (
       <View style={{ width: keyCol, gap }}>
-        <DeductionPad side={side} countLeft={side === R} kind="major" value={major.tenths / 10} count={m.major} height={majorH} disabled={locked || m.accT < major.tenths} onTap={() => api.tap(side, major.code)} />
-        <DeductionPad side={side} countLeft={side === R} kind="minor" value={minor.tenths / 10} count={m.minor} height={minorH} disabled={locked || m.accT < minor.tenths} onTap={() => api.tap(side, minor.code)} />
+        <DeductionPad side={side} countLeft={side === R} kind="major" value={major.tenths / 10} count={m.major} height={majorH} disabled={locked || m.accT < major.tenths} onTap={() => api.tap(side, major.code)} onUndo={() => api.undo(side, major.code)} undoDisabled={locked} />
+        <DeductionPad side={side} countLeft={side === R} kind="minor" value={minor.tenths / 10} count={m.minor} height={minorH} disabled={locked || m.accT < minor.tenths} onTap={() => api.tap(side, minor.code)} onUndo={() => api.undo(side, minor.code)} undoDisabled={locked} />
       </View>
     );
   };
-  const undo = (side: Side) => {
-    const m = side === 'chung' ? chung : hong;
-    return (
-      <Button variant="secondary" icon="undo" label={m.lastUndoLabel ? `Undo ${m.lastUndoLabel}` : 'Undo'} disabled={locked || !m.lastUndoLabel}
-        onPress={() => api.undo(side)} style={{ width: keyCol, paddingHorizontal: 8 }} accessibilityLabel={`Undo last ${side} deduction`} />
-    );
-  };
-
   // USB keypad: left column scores the athlete on the left of this screen, right column the right one.
   const onKeypad = (a: KeypadAction) => {
-    if (a.kind === 'send') { if (sendState !== 'incomplete' && sendState !== 'sent' && sendState !== 'sending') pressSend(); return; }
-    if (a.kind === 'cancel') { setArmed(false); return; }
-    if (locked) return;
+    if (a.kind === 'send') { pressSend(); return; }
+    if (a.kind === 'cancel' || locked) return;
     const side = a.pos === 'left' ? L : R;
     const m = by(side);
-    if (a.kind === 'undo') { if (m.lastUndoLabel) api.undo(side); return; }
+    if (a.kind === 'undo') { if (m.canUndo) api.undo(side); return; }
     const d = a.kind === 'major' ? major : minor;
     if (m.accT >= d.tenths) api.tap(side, d.code);
   };
 
   const receipt = s.myDraft.receipt;
   const detail = sendState === 'sent' ? receiptTime(receipt?.receivedAt) : chung.total != null && hong.total != null ? `${f1(by(L).total)} · ${f1(by(R).total)}` : null;
-  const label = sendState === 'ready' ? 'Send both scores' : sendState === 'incomplete' && compact ? 'Set every criterion' : undefined;
+  const label = sendState === 'ready' ? 'Send both scores' : sendState === 'incomplete' && compact ? 'Score every item' : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right', 'bottom']}>
-      <KeypadCapture onAction={onKeypad} />
+      <KeypadCapture onAction={onKeypad} active={!grid} />
       <MatchBar onHome={() => router.replace('/')} compact={compact} matchNo={cur.matchNo} ring={cur.ring} category={compact ? `${cur.category.replace('Male Under', 'Male U')} · ${cur.round.replace('Round of ', 'R')}` : cur.category} round={cur.round} judgeNo={s.me?.judgeNo} connection={s.connection === 'sending' ? 'sending' : 'online'} />
       <View style={[styles.plates, { paddingHorizontal: space[4], paddingTop: compact ? 6 : 12, gap }]}>
         <View style={{ flex: 1, minWidth: 0 }}><AthletePlate side={L} mirror={false} athlete={athlete(L)} accuracy={by(L).accuracy} presentation={by(L).presentation} compact={compact} /></View>
@@ -94,14 +90,14 @@ export function ScoringPK() {
           {rules.criteria.map((cr, i) => (
             <View key={cr.code} style={styles.row}>
               <View style={styles.stepCol}>
-                <CriterionStepper side={L} compact={compact} value={by(L).criteria[i]} min={cr.minTenths} max={cr.maxTenths} disabled={locked} onChange={(v) => api.setCriterion(L, i, v)} />
+                <ScoreChip side={L} compact={compact} label={cr.short} value={by(L).criteria[i]} disabled={locked} onPress={() => setGrid(L)} />
               </View>
               <View style={styles.lbl}>
                 <Txt v="label" style={{ textAlign: 'center', fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18 }}>{cr.short}</Txt>
                 <Txt v="caption" color="inkMuted" style={{ textAlign: 'center', fontSize: compact ? 11 : 12 }}>{cr.sub ?? `${(cr.minTenths / 10).toFixed(1)} – ${(cr.maxTenths / 10).toFixed(1)}`}</Txt>
               </View>
               <View style={styles.stepCol}>
-                <CriterionStepper side={R} compact={compact} value={by(R).criteria[i]} min={cr.minTenths} max={cr.maxTenths} disabled={locked} onChange={(v) => api.setCriterion(R, i, v)} />
+                <ScoreChip side={R} compact={compact} label={cr.short} value={by(R).criteria[i]} disabled={locked} onPress={() => setGrid(R)} />
               </View>
             </View>
           ))}
@@ -110,17 +106,21 @@ export function ScoringPK() {
       </View>
 
       <View style={[styles.foot, { paddingHorizontal: space[4], paddingVertical: compact ? 8 : 14, gap }]}>
-        {undo(L)}
         <Button icon="swap" variant="secondary" accessibilityLabel={swapped ? 'Swap sides: put Chung on the left' : 'Swap sides: put Hong on the left'}
           onPress={toggleSides} style={{ paddingHorizontal: 12, minHeight: compact ? 56 : 64 }} />
         <SendButton state={sendState} label={label} detail={detail} compact={compact} onPress={pressSend} style={{ flex: 1 }} />
-        {undo(R)}
       </View>
       {correction && sendState !== 'sent' ? (
         <Txt v="caption" color="alertText" style={styles.receipt}>Chief referee reopened your score · {correction.reason}. Adjust and send revision {(receipt?.revision ?? 0) + 1}.</Txt>
       ) : null}
       {sendState === 'sent' ? (
         <Txt v="caption" color="okText" style={styles.receipt}>Received by the server · rev {receipt?.revision} · {receipt?.submissionId}. Changes now need the chief referee.</Txt>
+      ) : null}
+      {grid ? (
+        <ScoreGrid side={grid} title={`${athlete(grid).name} (${athlete(grid).nat})`}
+          pages={[{ title: 'Presentation', rows: rules.criteria.map((cr, i) => ({ key: String(i), label: cr.short, sub: cr.sub, min: cr.minTenths, max: cr.maxTenths, value: by(grid).criteria[i] })) }]}
+          onOk={(v) => { Object.entries(v).forEach(([i, t]) => api.setCriterion(grid, Number(i), t)); setGrid(null); }}
+          onClose={() => setGrid(null)} />
       ) : null}
     </SafeAreaView>
   );

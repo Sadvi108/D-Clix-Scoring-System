@@ -157,7 +157,7 @@ The snapshot adds `setup`, `results`, `audit` and `correction` (see `ScoringSnap
 ## 6. Rules the server must implement (from the V2.0 design)
 
 - Recognized: Accuracy max 4.0; deductions ACC_01 = 0.1, ACC_03 = 0.3; Presentation max 6.0
-  from three criteria (POWER_SPEED, RHYTHM_TEMPO, ENERGY), each 0.5–2.0 step 0.1
+  from three criteria (POWER_SPEED, RHYTHM_TEMPO, ENERGY), each 0.0–2.0 step 0.1
   (Min/Step are NULL in RuleSet 1 — confirm before go-live).
 - Panel 3 judges: average all. 5 or 7: drop one highest and one lowest judge total, average
   the rest. **TrimMode is PENDING_APPROVAL** — the prototype uses total-wise trimming and,

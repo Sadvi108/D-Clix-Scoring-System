@@ -69,6 +69,8 @@ export interface SideScore {
   accuracy: number; // points, 1 decimal
   criteria: number[]; // presentation criterion values in ruleset order
   presentation: number;
+  /** Freestyle: tapped deductions taken off the total (points). */
+  deduction?: number;
   total: number;
 }
 

@@ -25,6 +25,11 @@ export function accuracyTenths(rules: RuleSet, taps: ScoreEvent[]): number {
   return Math.max(0, rules.accuracyMaxTenths - sum);
 }
 
+/** Sum of the tapped deductions, in tenths (Freestyle takes it off the total). */
+export function deductionTenths(rules: RuleSet, taps: ScoreEvent[]): number {
+  return taps.reduce((a, t) => a + (rules.deductions.find((d) => d.code === t.deductionCode)?.tenths ?? 0), 0);
+}
+
 /** Whether one more deduction of this code keeps accuracy at or above zero. */
 export function canDeduct(rules: RuleSet, currentAccTenths: number, code: string): boolean {
   const d = rules.deductions.find((x) => x.code === code);

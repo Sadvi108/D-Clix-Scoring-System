@@ -70,7 +70,7 @@ export function RulesTab({ wide }: { wide: boolean }) {
               <Txt v="overline" color="inkMuted">Accuracy deductions · P_DeductionType</Txt>
               {!editable ? <Txt v="caption" color="inkMuted">Locked</Txt> : null}
             </View>
-            {rs.deductions.length === 0 ? <Txt v="body" color="inkMuted">{rs.discipline === 'FREESTYLE' ? 'Freestyle has no tap deductions: judges score the technical-skill items below.' : 'No deductions defined.'}</Txt> : null}
+            {rs.deductions.length === 0 ? <Txt v="body" color="inkMuted">No deductions defined.</Txt> : null}
             {rs.deductions.map((d, i) => (
               <View key={d.code} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3], borderBottomWidth: 1, borderBottomColor: c.hairline, paddingVertical: space[2] }}>
                 <View style={{ flex: 1 }}>

@@ -62,7 +62,8 @@ export interface ScoringApi {
   autoSignIn(seat: number): Promise<Result>;
   signOut(): void;
   tap(side: Side, deductionCode: string): Promise<void>;
-  undo(side: Side): Promise<void>;
+  /** Reverse the last deduction of this side, or the last one of the given code (per-type undo). */
+  undo(side: Side, deductionCode?: string): Promise<void>;
   setCriterion(side: Side, index: number, tenths: number | null): void;
   submit(): Promise<Result>;
 
