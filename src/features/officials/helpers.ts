@@ -18,9 +18,9 @@ export function lifecycleSteps(status: PerformanceStatus | undefined) {
 export function judgeStates(s: ScoringSnapshot): { no: number; state: JudgeState }[] {
   const st = s.current?.status;
   return s.judges.map((j) => {
-    if (!j.online) return { no: j.judgeNo, state: 'offline' };
     const sent = s.submissions.some((x) => x.judgeNo === j.judgeNo);
     if (sent) return { no: j.judgeNo, state: 'sent' };
+    if (!j.online) return { no: j.judgeNo, state: 'offline' };
     return { no: j.judgeNo, state: st === 'OPEN' ? 'scoring' : 'waiting' };
   });
 }

@@ -3,7 +3,7 @@
 // as Phase 1 of the V2 design allows) and are merged into the snapshot, then listeners are notified.
 
 import type { DisplayMode, Result, RoundPatch, RuleSetPatch, ScoringApi, ScoringSnapshot } from '../ScoringApi';
-import type { AccountRole, Side } from '@/core/types';
+import type { AccountRole, PenaltyCode, Side, WalkoverReason } from '@/core/types';
 import { MockScoringApi } from '../mock/MockScoringApi';
 
 export class HttpScoringApi implements ScoringApi {
@@ -75,5 +75,12 @@ export class HttpScoringApi implements ScoringApi {
   resolveTie = async (_r: string, _o: string[]): Promise<Result> => this.todo('resolveTie → POST /poomsae/rounds/{id}/tie-break');
   confirmQualification = async (_r: string): Promise<Result> => this.todo('confirmQualification → POST /poomsae/rounds/{id}/qualify');
   scheduleRound = async (_r: string): Promise<Result> => this.todo('scheduleRound → POST /poomsae/rounds/{id}/schedule');
+  enterSeatScores = async (_j: number): Promise<Result> => this.todo('enterSeatScores → POST /poomsae/score/proxy');
+  freeSeat = async (_j: number): Promise<Result> => this.todo('freeSeat → DELETE /poomsae/rings/{ringId}/seats/{judgeNo}');
+  walkover = async (_p: string, _a: Side, _r: WalkoverReason): Promise<Result> => this.todo('walkover → POST /poomsae/attempt/walkover');
+  addPenalty = async (_s: Side, _c: PenaltyCode, _b: 'OPERATOR' | 'CHIEF'): Promise<Result> => this.todo('addPenalty → POST /poomsae/attempt/penalty');
+  removePenalty = async (_id: string): Promise<Result> => this.todo('removePenalty → DELETE /poomsae/attempt/penalty/{id}');
+  declareWinner = async (_w: Side, _b: 'OPERATOR' | 'CHIEF'): Promise<Result> => this.todo('declareWinner → POST /poomsae/result/declare');
+  orderRematch = async (_r: string, _e: string[]): Promise<Result> => this.todo('orderRematch → POST /poomsae/rounds/{id}/rematch');
   resetDemo = () => this.todo('resetDemo (mock only)');
 }

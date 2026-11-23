@@ -3,9 +3,9 @@
 // status transitions, ranking, qualification and an append-only audit log. Other judges are
 // simulated so the full flow runs on one device.
 
-import type { AccountRole, Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore } from '@/core/types';
+import type { AccountRole, Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Penalty, PenaltyCode, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore, WalkoverReason } from '@/core/types';
 import { cutLineTie, cutoffStandings, medalTie, pairBouts, roundScored, boutWinner } from '@/sports/poomsae/ranking';
-import { FREESTYLE_V1, RECOGNIZED_V1, isConfigured, isFreestyle, type RuleSet } from '@/sports/poomsae/rules';
+import { FREESTYLE_V1, PENALTY_TYPES, RECOGNIZED_V1, isConfigured, isFreestyle, type RuleSet } from '@/sports/poomsae/rules';
 import { accuracyTenths, activeTaps, aggregate, canDeduct, deductionTenths, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
 import type { DisplayMode, JudgeDraft, Result, RoundPatch, RuleSetPatch, ScoringApi, ScoringSnapshot } from '../ScoringApi';
 import {
@@ -300,7 +300,7 @@ export class MockScoringApi implements ScoringApi {
   private simulateOtherJudges() {
     const cur = this.s.current;
     if (!cur || cur.status !== 'OPEN') return;
-    const pending = this.s.judges.filter((j) => j.judgeNo !== this.s.me?.judgeNo && !this.s.submissions.some((s) => s.judgeNo === j.judgeNo));
+    const pending = this.s.judges.filter((j) => j.online && j.judgeNo !== this.s.me?.judgeNo && !this.s.submissions.some((s) => s.judgeNo === j.judgeNo));
     pending.forEach((j, i) => this.simSend(cur, j.judgeNo, 700 + i * 650));
   }
 
@@ -324,6 +324,8 @@ export class MockScoringApi implements ScoringApi {
       if (!agg) continue;
       const kept = this.s.submissions.filter((s) => s.judgeNo !== agg.excludedHigh && s.judgeNo !== agg.excludedLow);
       agg.presentation = round4(kept.reduce((x, s) => x + (s.sides[sd]?.presentation ?? 0), 0) / kept.length);
+      const penT = (cur.penalties ?? []).filter((p) => p.side === sd && p.formNo === cur.formNo).reduce((x, p) => x + p.tenths, 0);
+      if (penT) { agg.penalty = penT / 10; agg.final = round4(Math.max(0, agg.final - penT / 10)); }
       res.sides[sd] = agg;
     }
     if (cur.format === 'PK' && res.sides.chung && res.sides.hong) {
@@ -721,6 +723,138 @@ export class MockScoringApi implements ScoringApi {
     this.set({ queue: [...this.s.queue, ...perfs], results: { ...this.s.results, bouts } });
     this.setRound(r.id, { status: 'LIVE' });
     this.log('Chief referee', 'ROUND_SCHEDULE', 'RESULTS', this.roundLabel(r), `${perfs.length} performances added to ${this.s.ring.name}`);
+    return ok;
+  }
+
+  // ---------------- Game actions (operator / chief referee) ----------------
+  private actor(by: 'OPERATOR' | 'CHIEF') { return by === 'CHIEF' ? 'Chief referee' : 'Ring operator'; }
+
+  async enterSeatScores(judgeNo: number): Promise<Result> {
+    const cur = this.s.current;
+    if (!cur || cur.status !== 'OPEN') return fail('Scoring is not open');
+    if (this.s.submissions.some((x) => x.judgeNo === judgeNo)) return fail(`J${judgeNo} has already sent`);
+    if (!this.s.judges.some((j) => j.judgeNo === judgeNo)) return fail(`No seat J${judgeNo} on this panel`);
+    await wait(200);
+    const rules = this.s.rules;
+    const crit = rules.criteria.map((c) => c.maxTenths);
+    const pres = presentationTenths(rules, crit)!;
+    const acc = isFreestyle(rules) ? technicalTenths(rules, crit)! : rules.accuracyMaxTenths;
+    const one: SideScore = { accuracy: acc / 10, criteria: crit.map((v) => v / 10), presentation: pres / 10, total: (acc + pres) / 10 };
+    const sides: Partial<Record<Side, SideScore>> = cur.format === 'PK' ? { chung: one, hong: { ...one } } : { chung: one };
+    const revision = this.nextRevision(judgeNo);
+    const sub: JudgeSubmission = { submissionId: id('SUB'), performanceId: cur.id, judgeNo, revision, idempotencyKey: id('IDEM'), receivedAt: now(), sides, enteredBy: 'OPERATOR' };
+    this.set({ submissions: [...this.s.submissions, sub] });
+    this.log('Ring operator', 'PROXY_SCORE', 'SCORING', this.perfLabel(cur), `J${judgeNo} offline · maximum entered (${one.total.toFixed(1)})`);
+    this.checkComplete();
+    return ok;
+  }
+
+  async freeSeat(judgeNo: number): Promise<Result> {
+    const j = this.s.judges.find((x) => x.judgeNo === judgeNo);
+    if (!j) return fail(`No seat J${judgeNo}`);
+    if (this.s.current?.status === 'OPEN' && this.s.submissions.some((x) => x.judgeNo === judgeNo)) return fail(`J${judgeNo} has sent; the seat stays until the game ends`);
+    await wait(150);
+    this.set({
+      judges: this.s.judges.map((x) => (x.judgeNo === judgeNo ? { ...x, online: false } : x)),
+      rings: this.s.rings.map((r) => (r.id === this.s.ring.id ? { ...r, seats: r.seats.map((st) => (st.judgeNo === judgeNo ? { ...st, takenBy: null } : st)) } : r)),
+      ...(this.s.me?.judgeNo === judgeNo ? { me: null } : {}),
+    });
+    this.log('Ring operator', 'FREE_SEAT', 'SETUP', `${this.s.ring.name} · J${judgeNo}`, j.name);
+    return ok;
+  }
+
+  async walkover(performanceId: string, absent: Side, reason: WalkoverReason): Promise<Result> {
+    const p = this.s.queue.find((x) => x.id === performanceId);
+    if (!p) return fail('Game not found');
+    const cur = this.s.current;
+    const isCur = cur?.id === performanceId;
+    if (isCur && !['CALLED', 'ON_MAT', 'OPEN'].includes(cur!.status)) return fail('Too late for a walkover: the referees have sent');
+    if (!isCur && p.status !== 'QUEUED') return fail('This game is already finished');
+    await wait(200);
+    if (isCur) { this.stopTimer(); this.clearSims(); }
+    const done: Performance = { ...p, status: 'WITHDRAWN', clockRunning: false, paused: false, walkover: { absent, reason } };
+    let queue = this.s.queue.map((x) => (x.id === performanceId ? done : x));
+    let results = this.s.results;
+    if (p.format === 'PK' && p.hong) {
+      const winner: Side = absent === 'chung' ? 'hong' : 'chung';
+      results = { ...results, bouts: results.bouts.map((b) => (b.performanceId === p.id ? { ...b, winner } : b)) };
+      this.set({ queue, results, current: isCur ? null : cur, submissions: isCur ? [] : this.s.submissions, result: isCur ? null : this.s.result });
+      this.log('Ring operator', 'WALKOVER', 'SCORING', this.perfLabel(p), `${p[absent]!.name}: ${reason} · ${p[winner]!.name} wins`);
+    } else {
+      const w = results.withdrawn;
+      if (p.roundId && !w.some((x) => x.roundId === p.roundId && x.entryId === p.chung.entryId)) {
+        results = { ...results, withdrawn: [...w, { roundId: p.roundId, entryId: p.chung.entryId }] };
+        queue = queue.map((x) => (x.roundId === p.roundId && x.chung.entryId === p.chung.entryId && x.status === 'QUEUED' ? { ...x, status: 'WITHDRAWN', walkover: { absent: 'chung', reason } } : x));
+      }
+      this.set({ queue, results, current: isCur ? null : cur, submissions: isCur ? [] : this.s.submissions, result: isCur ? null : this.s.result });
+      this.log('Ring operator', 'WALKOVER', 'SCORING', this.perfLabel(p), `${p.chung.name}: ${reason} · out of the round`);
+    }
+    if (p.roundId) this.updateRoundProgress(p.roundId);
+    return ok;
+  }
+
+  async addPenalty(side: Side, code: PenaltyCode, by: 'OPERATOR' | 'CHIEF'): Promise<Result> {
+    const cur = this.s.current;
+    if (!cur || !['OPEN', 'COMPLETE', 'WITH_RIC'].includes(cur.status)) return fail('No game to penalise');
+    if (side === 'hong' && !cur.hong) return fail('No Hong athlete in this game');
+    const t = PENALTY_TYPES[code];
+    if (t.chiefOnly && by !== 'CHIEF') return fail(`${t.label} is given by the chief referee only`);
+    await wait(150);
+    const pen: Penalty = { id: id('PEN'), side, formNo: cur.formNo, code, tenths: t.tenths, by, at: now() };
+    this.setCurrent({ penalties: [...(cur.penalties ?? []), pen] });
+    if (this.s.result) this.set({ result: this.compute(this.s.current!) });
+    this.log(this.actor(by), 'PENALTY', 'SCORING', this.perfLabel(cur), `${cur[side]!.name} · Form ${cur.formNo} · ${t.label} −${(t.tenths / 10).toFixed(1)}`);
+    return ok;
+  }
+
+  async removePenalty(penaltyId: string): Promise<Result> {
+    const cur = this.s.current;
+    const pen = cur?.penalties?.find((x) => x.id === penaltyId);
+    if (!cur || !pen) return fail('Penalty not found');
+    if (cur.status === 'RELEASED') return fail('The result is released');
+    await wait(150);
+    this.setCurrent({ penalties: cur.penalties!.filter((x) => x.id !== penaltyId) });
+    if (this.s.result) this.set({ result: this.compute(this.s.current!) });
+    this.log(this.actor(pen.by), 'PENALTY_REMOVE', 'SCORING', this.perfLabel(cur), `${cur[pen.side]!.name} · ${PENALTY_TYPES[pen.code].label}`);
+    return ok;
+  }
+
+  async declareWinner(winner: Side, by: 'OPERATOR' | 'CHIEF'): Promise<Result> {
+    const cur = this.s.current;
+    const r = this.s.result;
+    if (!cur || cur.format !== 'PK' || !r || !['COMPLETE', 'WITH_RIC'].includes(cur.status)) return fail('Every referee must send first');
+    if (r.winner === 'TIE' && by !== 'CHIEF') return fail('Tie: only the chief referee can decide');
+    await wait(400);
+    const releasedAt = now();
+    const next: RoundResult = { ...r, winner, declaredBy: by, released: true, releasedAt };
+    this.setCurrent({ status: 'RELEASED' });
+    this.set({ result: next, display: 'RESULT' });
+    this.recordResult(cur, next, releasedAt);
+    const against = r.winner !== 'TIE' && r.winner !== winner ? ' (against the suggested winner)' : r.winner === 'TIE' ? ' (tie decided)' : '';
+    this.log(this.actor(by), 'PK_DECLARE', 'RESULTS', this.perfLabel(cur), `${cur[winner]!.name} wins${against}`);
+    return ok;
+  }
+
+  async orderRematch(roundId: string, entryIds: string[]): Promise<Result> {
+    const r = this.round(roundId);
+    if (!r || r.format !== 'CUTOFF') return fail('Round not found');
+    if (r.status === 'CONFIRMED') return fail('This round is already confirmed');
+    if (entryIds.length < 2) return fail('Choose the tied entries');
+    await wait(250);
+    const tpl = this.s.queue.find((x) => x.roundId === roundId);
+    const entries = this.s.results.entries[roundId] ?? [];
+    if (!tpl) return fail('No game template for this round');
+    const form = r.forms[0]?.name ?? tpl.form;
+    const perfs: Performance[] = entryIds.map((e) => ({
+      ...tpl, id: id('P'), matchNo: `RM-${this.nextMatchNo++}`, chung: entries.find((x) => x.entryId === e) ?? tpl.chung,
+      formNo: 1, form, status: 'QUEUED', clockSec: 0, clockRunning: false, paused: false, stopReason: null, penalties: [], walkover: null, rematch: true,
+    }));
+    const at = this.s.current ? this.s.queue.findIndex((x) => x.id === this.s.current!.id) + 1 : 0;
+    const queue = [...this.s.queue.slice(0, at), ...perfs, ...this.s.queue.slice(at)];
+    this.set({ queue });
+    if (r.status === 'SCORED') this.setRound(r.id, { status: 'LIVE' });
+    const names = entryIds.map((e) => entries.find((x) => x.entryId === e)?.name ?? e);
+    this.log('Chief referee', 'REMATCH', 'RESULTS', this.roundLabel(r), `${names.join(', ')} perform ${form} again`);
     return ok;
   }
 

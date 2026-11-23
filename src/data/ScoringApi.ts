@@ -3,7 +3,7 @@
 // the backend team implements the same contract over HTTP + WebSocket (see HttpScoringApi and
 // docs/API_CONTRACT.md). Swapping is a one-line change in src/data/index.ts.
 
-import type { Account, AccountRole, Athlete, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
+import type { Account, AccountRole, Athlete, PenaltyCode, WalkoverReason, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
 import type { DeductionType, PresentationCriterion, RuleSet } from '@/sports/poomsae/rules';
 
 export type DisplayMode = 'CALLUP' | 'LIVE' | 'RESULT';
@@ -117,6 +117,21 @@ export interface ScoringApi {
   resolveTie(roundId: string, orderedEntryIds: string[]): Promise<Result>;
   confirmQualification(roundId: string): Promise<Result>;
   scheduleRound(roundId: string): Promise<Result>;
+
+  // Game actions (operator / chief referee)
+  /** Operator enters the maximum score for a judge seat whose tablet is offline. */
+  enterSeatScores(judgeNo: number): Promise<Result>;
+  /** Release a judge seat so another tablet can take it. */
+  freeSeat(judgeNo: number): Promise<Result>;
+  /** Walkover: one athlete does not take part. PK: the other athlete wins. Cut-off: the entry leaves the round. */
+  walkover(performanceId: string, absent: Side, reason: WalkoverReason): Promise<Result>;
+  /** Penalty on the current game. Over time is chief referee only. */
+  addPenalty(side: Side, code: PenaltyCode, by: 'OPERATOR' | 'CHIEF'): Promise<Result>;
+  removePenalty(penaltyId: string): Promise<Result>;
+  /** PK: declare the winner and release. The operator can declare unless it is a tie; then only the chief can. */
+  declareWinner(winner: Side, by: 'OPERATOR' | 'CHIEF'): Promise<Result>;
+  /** Cut-off tie: the chief orders the tied entries to perform again (added next in the queue). */
+  orderRematch(roundId: string, entryIds: string[]): Promise<Result>;
 
   // Prototype only
   resetDemo(): void;

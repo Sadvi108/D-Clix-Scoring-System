@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, useScoring } from '@/data';
 import { judgeStates, lifecycleSteps } from '@/features/officials/helpers';
 import { canOperate } from '@/features/session/session';
+import { PenaltySheet, ProvisionalResult, SeatSheet, WalkoverSheet } from '@/features/officials/GameActions';
+import type { Side } from '@/core/types';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { AthletePlate, MatchBar, mmss } from '@/ui/match';
@@ -34,6 +36,15 @@ function Operator() {
   const wide = width >= 900;
   const [msg, setMsg] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [seat, setSeat] = useState<number | null>(null);
+  const [walk, setWalk] = useState(false);
+  const [more, setMore] = useState(false);
+  // The chief referee can run the operator screen too; actions are recorded under the signed-in role.
+  const by: 'OPERATOR' | 'CHIEF' = s.accounts.some((a) => a.role === 'OPERATOR') ? 'OPERATOR' : 'CHIEF';
+  const declare = async (w: Side) => {
+    const r = await api.declareWinner(w, by);
+    setMsg(r.ok ? null : r.error);
+  };
   const call = async (pid: string) => {
     const r = await api.callPerformance(pid);
     setMsg(r.ok ? null : r.error);
@@ -57,7 +68,14 @@ function Operator() {
       case 'CALLED': return { label: 'Confirm athletes on mat', icon: 'check', run: () => api.confirmOnMat() };
       case 'ON_MAT': return { label: `Open scoring · Form ${cur.formNo}`, icon: 'send', run: () => api.openScoring() };
       case 'OPEN': return { label: cur.paused ? 'Paused · resume to continue' : cur.clockRunning ? 'Clock running' : cur.clockSec === 0 ? 'Start the clock to begin' : `Waiting for judges · ${sent}/${s.judges.length}`, icon: cur.paused ? 'pause' : 'clock', disabled: true };
-      case 'COMPLETE': return { label: cur.stopReason && sent === 0 ? 'Hand to chief referee · no scores' : 'Hand to chief referee', icon: 'send', run: () => api.handToReferee() };
+      case 'COMPLETE':
+        if (cur.format === 'PK' && cur.hong && s.result) {
+          const w = s.result.winner;
+          if (w === 'TIE' && by !== 'CHIEF') return { label: 'Tie · waiting for the chief referee', icon: 'users', disabled: true };
+          const pick: Side = w === 'hong' ? 'hong' : 'chung';
+          return { label: `Declare ${cur[pick]!.name}${w === 'TIE' ? '' : ' ★'}`, icon: 'flag', run: () => declare(pick) };
+        }
+        return { label: cur.stopReason && sent === 0 ? 'Hand to chief referee · no scores' : 'Hand to chief referee', icon: 'send', run: () => api.handToReferee() };
       case 'WITH_RIC': return { label: 'Chief referee reviewing…', icon: 'refresh', disabled: true };
       default: return { label: '—', icon: 'dot', disabled: true };
     }
@@ -83,7 +101,7 @@ function Operator() {
               ) : <Txt v="label" color="chungText" numberOfLines={1}>{q.chung.name}</Txt>}
               <Txt v="caption" color="inkMuted" style={{ fontSize: 11 }}>{q.format === 'PK' ? 'PK' : q.roundId === 'R-FSP-F' || q.form.startsWith('Freestyle') ? 'Freestyle' : 'Cut-off'} · {q.form}</Txt>
             </View>
-            <Txt v="overline" color={done ? 'okText' : isCur ? 'goldText' : callable ? 'ink' : 'inkMuted'} style={{ fontSize: 10 }}>{out ? 'Withdrawn' : done ? 'Released' : isCur ? 'Now' : callable ? 'Call ›' : 'Queued'}</Txt>
+            <Txt v="overline" color={done ? 'okText' : isCur ? 'goldText' : callable ? 'ink' : 'inkMuted'} style={{ fontSize: 10 }}>{out ? (q.walkover ? (q.walkover.reason === 'Did not appear' ? 'No-show' : q.walkover.reason === 'Disqualified' ? 'DQ' : 'Walkover') : 'Withdrawn') : done ? 'Released' : isCur ? 'Now' : callable ? 'Call ›' : 'Queued'}</Txt>
           </Pressable>
         );
       })}
@@ -138,8 +156,12 @@ function Operator() {
       <Panel>
         <View style={[styles.mid, { flexDirection: wide ? 'row' : 'column' }]}>
           <View style={{ gap: 6 }}>
-            <Txt v="overline" color="inkMuted">Judges · submission status only</Txt>
-            <JudgeStatusGrid judges={judgeStates(s)} chipWidth={wide ? 72 : 60} />
+            <Txt v="overline" color="inkMuted">Referees · sent {sent}/{s.judges.length} · tap a tile for options</Txt>
+            <JudgeStatusGrid chipWidth={wide ? 84 : 64} onPress={(n) => setSeat(n)}
+              judges={judgeStates(s).map((j) => {
+                const sub = s.result ? s.submissions.find((x) => x.judgeNo === j.no) : undefined;
+                return { ...j, detail: sub ? Object.values(sub.sides).map((x) => x!.total.toFixed(1)).join(' · ') : undefined };
+              })} />
           </View>
           <View style={{ gap: 6 }}>
             <Txt v="overline" color="inkMuted">Venue display</Txt>
@@ -151,15 +173,23 @@ function Operator() {
           </View>
         </View>
       </Panel>
+      {s.result && cur ? <Panel><ProvisionalResult s={s} /></Panel> : null}
       <View style={[styles.act, { flexDirection: wide ? 'row' : 'column-reverse' }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], flexWrap: 'wrap', flexShrink: 1, minWidth: 0 }}>
-          <Button label="No-show / withdraw" icon="alert" variant="danger" disabled={!cur || !['CALLED', 'ON_MAT'].includes(st ?? '')} onPress={() => cur && api.withdraw(cur.id)} />
+          <Button label="Walkover" icon="alert" variant="danger" disabled={!cur || !['CALLED', 'ON_MAT', 'OPEN'].includes(st ?? '')} onPress={() => setWalk(true)} />
           <Button label="Stop game" icon="stop" variant="danger" disabled={st !== 'OPEN'} onPress={() => setStopping(true)} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="lock" size={14} color={c.inkMuted} /><Txt v="caption" color="inkMuted">Scores are never shown here</Txt></View>
+          <Button label="More actions" icon="menu" variant="secondary" disabled={!cur || !['OPEN', 'COMPLETE', 'WITH_RIC'].includes(st ?? '')} onPress={() => setMore(true)} />
+          {!s.result ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="lock" size={14} color={c.inkMuted} /><Txt v="caption" color="inkMuted">Scores show here only after every referee has sent</Txt></View> : null}
         </View>
         <View style={{ gap: space[2], alignItems: wide ? 'flex-end' : 'stretch' }}>
           {msg ? <Txt v="caption" color="alertText" style={{ maxWidth: 420 }}>{msg}</Txt> : null}
-          <Button label={primary.label} icon={primary.icon} size="lg" disabled={primary.disabled} onPress={primary.run} style={{ minWidth: wide ? 320 : undefined }} />
+          <View style={{ flexDirection: 'row', gap: space[2], flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {st === 'COMPLETE' && cur?.format === 'PK' && cur.hong && s.result && (s.result.winner !== 'TIE' || by === 'CHIEF') ? (() => {
+              const other: Side = s.result!.winner === 'hong' ? 'chung' : 'hong';
+              return <Button label={`Declare ${cur[other]!.name}`} icon="flag" variant="secondary" size="lg" onPress={() => declare(other)} />;
+            })() : null}
+            <Button label={primary.label} icon={primary.icon} size="lg" disabled={primary.disabled} onPress={primary.run} style={{ minWidth: wide ? 320 : undefined }} />
+          </View>
         </View>
       </View>
     </View>
@@ -173,6 +203,9 @@ function Operator() {
         {main}
         {!wide ? queue : null}
       </ScrollView>
+      {seat != null ? <SeatSheet judgeNo={seat} onClose={() => setSeat(null)} /> : null}
+      {walk && cur ? <WalkoverSheet perf={cur} onClose={() => setWalk(false)} /> : null}
+      {more && cur ? <PenaltySheet by={by} onClose={() => setMore(false)} /> : null}
       {stopping && cur ? <StopGameSheet sent={sent} total={s.judges.length} onClose={() => setStopping(false)} onStop={async (reason) => {
         const r = await api.stopGame(reason);
         setStopping(false);

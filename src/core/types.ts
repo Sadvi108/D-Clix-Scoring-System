@@ -45,6 +45,12 @@ export interface Performance {
   paused?: boolean;
   /** Operator stopped the game early (e.g. injury); judges who had not sent are locked out. */
   stopReason?: string | null;
+  /** Penalties given by the operator or chief referee (taken off that athlete's final). */
+  penalties?: Penalty[];
+  /** Walkover: the athlete who did not take part, and why. */
+  walkover?: { absent: Side; reason: WalkoverReason } | null;
+  /** Ordered by the chief referee to settle a cut-off tie. */
+  rematch?: boolean;
 }
 
 export interface JudgeAssignment {
@@ -87,6 +93,8 @@ export interface JudgeSubmission {
   idempotencyKey: string;
   receivedAt: string; // server time
   sides: Partial<Record<Side, SideScore>>;
+  /** Entered by the ring operator for an offline judge seat. */
+  enteredBy?: 'OPERATOR';
 }
 
 export interface SideResult {
@@ -94,6 +102,8 @@ export interface SideResult {
   presentation?: number; // mean presentation of the kept judges (tie-break input)
   excludedHigh: number | null; // judgeNo
   excludedLow: number | null;
+  /** Penalties taken off this side's final (points). */
+  penalty?: number;
 }
 
 /** PoomsaeRoundResult (provisional until released). */
@@ -104,6 +114,8 @@ export interface RoundResult {
   released: boolean;
   releasedAt: string | null;
   trimMode: 'PENDING_APPROVAL' | 'APPROVED';
+  /** PK: who declared the winner (the operator, or the chief referee on a tie). */
+  declaredBy?: 'OPERATOR' | 'CHIEF';
 }
 
 export type JudgeSendState = 'idle' | 'sending' | 'sent' | 'failed';
@@ -241,4 +253,21 @@ export interface RingInfo {
   operatorIn: boolean;
   /** Judge seats of the ring panel and who sits in each (null = free). */
   seats: { judgeNo: number; takenBy: string | null }[];
+}
+
+// ---------------- Game actions ----------------
+
+export type WalkoverReason = 'Did not appear' | 'Withdrawn' | 'Disqualified';
+
+export type PenaltyCode = 'OVER_TIME' | 'OUT_OF_BOUNDS';
+
+/** A penalty on one athlete for one form, taken off that athlete's final score. */
+export interface Penalty {
+  id: string;
+  side: Side;
+  formNo: number;
+  code: PenaltyCode;
+  tenths: number;
+  by: 'OPERATOR' | 'CHIEF';
+  at: string;
 }

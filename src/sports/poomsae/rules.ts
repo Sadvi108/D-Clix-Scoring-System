@@ -90,3 +90,12 @@ export const technicalCriteria = (r: RuleSet) => r.criteria.filter((c) => c.grou
 export const presentationCriteria = (r: RuleSet) => r.criteria.filter((c) => c.group !== 'TECHNICAL');
 
 export const isConfigured = (r: RuleSet) => r.criteria.length > 0 && r.deductions.length > 0;
+
+/**
+ * Game penalties (DRAFT, as in the ring operator demo): taken off the athlete's final score for that form.
+ * Over time is given by the chief referee only.
+ */
+export const PENALTY_TYPES = {
+  OVER_TIME: { label: 'Over time', tenths: 3, chiefOnly: true },
+  OUT_OF_BOUNDS: { label: 'Out of bounds', tenths: 1, chiefOnly: false },
+} as const;

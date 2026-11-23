@@ -8,6 +8,7 @@ import type { Side } from '@/core/types';
 import { api, useScoring } from '@/data';
 import { hhmmss, judgeStates } from '@/features/officials/helpers';
 import { accountFor } from '@/features/session/session';
+import { CutoffTiePanel, PenaltySheet } from '@/features/officials/GameActions';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { MatchBar } from '@/ui/match';
@@ -36,6 +37,7 @@ function Referee() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [corr, setCorr] = useState(false);
+  const [more, setMore] = useState(false);
   const cur = s.current;
   const sides: Side[] = cur?.format === 'PK' ? ['chung', 'hong'] : ['chung'];
   const complete = !!s.result;
@@ -117,8 +119,19 @@ function Referee() {
         </View>
       ) : null}
       {msg ? <Txt v="caption" color="alertText">{msg}</Txt> : null}
-      <Button label={r?.released ? `Released ${hhmmss(r.releasedAt)}` : busy ? 'Releasing…' : 'Release to display'} icon={r?.released ? 'check' : 'send'} size="lg" block
-        disabled={!complete || !!r?.released || busy} onPress={release} />
+      {cur?.format === 'PK' && cur.hong && r?.winner === 'TIE' && !r.released ? (
+        <View style={{ gap: space[2] }}>
+          <Txt v="label" color="alertText">Tie: choose the winner (chief referee only)</Txt>
+          {(['chung', 'hong'] as Side[]).map((sd) => (
+            <Button key={sd} label={`Declare ${cur[sd]!.name}`} icon="flag" size="lg" block variant={sd === 'chung' ? 'primary' : 'secondary'} disabled={busy}
+              onPress={async () => { setBusy(true); const x = await api.declareWinner(sd, 'CHIEF'); setBusy(false); setMsg(x.ok ? null : x.error); }} />
+          ))}
+        </View>
+      ) : (
+        <Button label={r?.released ? `Released ${hhmmss(r.releasedAt)}` : busy ? 'Releasing…' : 'Release to display'} icon={r?.released ? 'check' : 'send'} size="lg" block
+          disabled={!complete || !!r?.released || busy} onPress={release} />
+      )}
+      <Button label="More actions · penalty" icon="menu" variant="secondary" block disabled={!cur || !['OPEN', 'COMPLETE', 'WITH_RIC'].includes(cur.status)} onPress={() => setMore(true)} />
       <Button label="Request correction" icon="pencil" variant="danger" block disabled={!complete || !!r?.released}
         onPress={() => setCorr(true)} />
     </Panel>
@@ -158,12 +171,14 @@ function Referee() {
             </View>
           ) : null}
           {table}
+          <CutoffTiePanel s={s} />
         </View>
         <View style={{ width: wide ? 320 : undefined, gap: space[3] }}>
           {resultCard}
           {audit}
         </View>
       </ScrollView>
+      {more ? <PenaltySheet by="CHIEF" onClose={() => setMore(false)} /> : null}
       <CorrectionSheet visible={corr} judges={subs.map((x) => x.judgeNo)} onClose={() => setCorr(false)} onDone={(t) => { setCorr(false); setMsg(t); }} />
     </SafeAreaView>
   );

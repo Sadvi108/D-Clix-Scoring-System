@@ -10,7 +10,7 @@ const JS: Record<JudgeState, { icon: IconName; label: string }> = {
   sent: { icon: 'check', label: 'Sent' },
   offline: { icon: 'wifi-off', label: 'Offline' },
 };
-export function JudgeStatusGrid({ judges, chipWidth = 76 }: { judges: { no: number; state: JudgeState }[]; chipWidth?: number }) {
+export function JudgeStatusGrid({ judges, chipWidth = 76, onPress }: { judges: { no: number; state: JudgeState; detail?: string }[]; chipWidth?: number; onPress?: (judgeNo: number) => void }) {
   const { c } = useTheme();
   return (
     <View style={styles.judges} accessibilityLabel="Judge submissions">
@@ -22,13 +22,16 @@ export function JudgeStatusGrid({ judges, chipWidth = 76 }: { judges: { no: numb
           offline: { bg: c.alertSoft, border: c.alert, fg: c.alertText },
         }[j.state];
         return (
-          <View key={j.no} style={[styles.judge, { width: chipWidth, backgroundColor: t.bg, borderColor: t.border }]}>
+          <Pressable key={j.no} disabled={!onPress} onPress={() => onPress?.(j.no)} accessibilityRole={onPress ? 'button' : undefined}
+            accessibilityLabel={`Judge ${j.no}, ${JS[j.state].label}${onPress ? '. Tap for options' : ''}`}
+            style={({ pressed }) => [styles.judge, { width: chipWidth, backgroundColor: t.bg, borderColor: t.border, opacity: pressed ? 0.7 : 1 }, j.detail ? { height: 76 } : null]}>
             <Txt v="scoreMd">J{j.no}</Txt>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Icon name={JS[j.state].icon} size={12} color={t.fg} />
               <Txt v="caption" color={t.fg} style={{ fontSize: 11 }}>{JS[j.state].label}</Txt>
             </View>
-          </View>
+            {j.detail ? <Txt v="caption" color={t.fg} style={{ fontSize: 11 }}>{j.detail}</Txt> : null}
+          </Pressable>
         );
       })}
     </View>

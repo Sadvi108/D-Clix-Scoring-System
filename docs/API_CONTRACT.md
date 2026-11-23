@@ -86,6 +86,13 @@ QUEUED → CALLED → ON_MAT → OPEN → COMPLETE → WITH_RIC → RELEASED
 | `chooseRing(ringId)` | POST | `/poomsae/rings/{ringId}/open` | → 204 | Operator or chief opens a ring |
 | `setPaused(paused)` | POST | `/poomsae/attempt/pause` | `{ paused }` | Locks every judge and stops the clock |
 | `stopGame(reason)` | POST | `/poomsae/attempt/stop` | `{ reason }` | Ends the game early; judges who sent keep their score |
+| `enterSeatScores(judgeNo)` | POST | `/poomsae/score/proxy` | `{ judgeNo }` | Operator enters the maximum for an offline seat; submission marked `enteredBy: OPERATOR` |
+| `freeSeat(judgeNo)` | DELETE | `/poomsae/rings/{ringId}/seats/{judgeNo}` | → 204 | Signs the tablet out of the seat |
+| `walkover(performanceId, absent, reason)` | POST | `/poomsae/attempt/walkover` | `{ absent: 'chung'\|'hong', reason: 'Did not appear'\|'Withdrawn'\|'Disqualified' }` | PK: the other athlete wins. Cut-off: the entry leaves the round |
+| `addPenalty(side, code, by)` | POST | `/poomsae/attempt/penalty` | `{ side, code: 'OVER_TIME'\|'OUT_OF_BOUNDS' }` | Over time −0.3 chief only; out of bounds −0.1. Taken off that athlete's final (DRAFT) |
+| `removePenalty(id)` | DELETE | `/poomsae/attempt/penalty/{id}` | → 204 | Until the result is released |
+| `declareWinner(winner, by)` | POST | `/poomsae/result/declare` | `{ winner: 'chung'\|'hong' }` | PK: operator declares (suggested winner marked); on a tie only the chief can. Releases the result |
+| `orderRematch(roundId, entryIds)` | POST | `/poomsae/rounds/{id}/rematch` | `{ entryIds }` | Cut-off tie: the tied entries perform again, next in the queue |
 | `signOut()` | `POST /poomsae/auth/logout` | — | `204` | |
 | (load) | `GET /poomsae/attempt/current` | — | `{ performance, myEvents, mySubmission }` | Only the judge's own data |
 | `tap(side, code)` | `POST /poomsae/event` | `{ performanceId, side, type: "TAP", deductionCode, clientRequestId }` | `ScoreEvent` | Performance must be OPEN; reject if accuracy would go below 0; idempotent on `clientRequestId` |
