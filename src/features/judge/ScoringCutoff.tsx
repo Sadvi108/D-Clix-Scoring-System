@@ -1,14 +1,14 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '@/data';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { flag } from '@/ui/flag';
 import { MatchBar, mmss } from '@/ui/match';
-import { Button, Icon, Txt, f1 } from '@/ui/primitives';
+import { Txt, f1 } from '@/ui/primitives';
 import { DeductionPad, LockBanner, ScoreChip, ScoreSummary, SendButton } from '@/ui/scoring';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
@@ -22,8 +22,8 @@ export function ScoringCutoff() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 700;
-  const { s, cur, chung, locked, paused, sendState, correction } = useJudge();
-  const [sheet, setSheet] = useState<'closed' | 'receipt'>('closed');
+  const twoCol = width >= 900; // tablet landscape: keys on the left, presentation on the right
+  const { s, cur, chung, locked, notice, sendState, correction } = useJudge();
   const [grid, setGrid] = useState(false);
   if (!cur) return null;
 
@@ -36,12 +36,11 @@ export function ScoringCutoff() {
   async function send() {
     if (sendState !== 'ready' && sendState !== 'failed') return;
     const r = await api.submit();
-    if (r.ok) setSheet('receipt');
+    if (!r.ok) return;
   }
 
   // USB keypad: either column scores the one athlete; Enter sends.
   const onKeypad = (a: KeypadAction) => {
-    if (sheet === 'receipt') { if (a.kind === 'send' || a.kind === 'cancel') setSheet('closed'); return; }
     if (a.kind === 'send') { if (sendState === 'ready' || sendState === 'failed') send(); return; }
     if (a.kind === 'cancel' || locked) return;
     if (a.kind === 'undo') { if (chung.canUndo) api.undo('chung'); return; }
@@ -51,9 +50,9 @@ export function ScoringCutoff() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
-      <KeypadCapture onAction={onKeypad} active={sheet === 'closed' && !grid} />
+      <KeypadCapture onAction={onKeypad} active={!grid} />
       <MatchBar onHome={() => router.replace('/')} compact={!wide} matchNo={cur.matchNo} ring={wide ? cur.ring : undefined} category={wide ? cur.category : cur.category.replace(' · Cut-off', '')} round={cur.round} judgeNo={s.me?.judgeNo} connection={wide ? 'online' : undefined} />
-      {paused ? <LockBanner text="Paused by the operator. Scoring is locked." /> : null}
+      {notice ? <LockBanner icon={notice.icon} text={notice.text} /> : null}
       <View style={[styles.who, { backgroundColor: c.chungSoft }]}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View style={{ flexDirection: 'row', gap: space[2], alignItems: 'center' }}>
@@ -70,10 +69,11 @@ export function ScoringCutoff() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, wide && { maxWidth: 720, alignSelf: 'center', width: '100%' }]} scrollEnabled={false}>
+      <ScrollView contentContainerStyle={[styles.body, wide && { maxWidth: twoCol ? 1200 : 720, alignSelf: 'center', width: '100%' }, twoCol && { flexDirection: 'row', gap: space[6], alignItems: 'flex-start' }]} scrollEnabled={twoCol}>
+        <View style={{ gap: space[3], flex: twoCol ? 1 : undefined }}>
         <View style={styles.keys}>
-          <DeductionPad side="solo" kind="major" value={major.tenths / 10} count={chung.major} height={wide ? 200 : 168} style={{ flex: 1.2 }} disabled={locked || chung.accT < major.tenths} onTap={() => api.tap('chung', major.code)} onUndo={() => api.undo('chung', major.code)} undoDisabled={locked} />
-          <DeductionPad side="solo" kind="minor" value={minor.tenths / 10} count={chung.minor} height={wide ? 200 : 168} style={{ flex: 1 }} disabled={locked || chung.accT < minor.tenths} onTap={() => api.tap('chung', minor.code)} onUndo={() => api.undo('chung', minor.code)} undoDisabled={locked} />
+          <DeductionPad side="solo" kind="major" value={major.tenths / 10} count={chung.major} height={twoCol ? 260 : wide ? 200 : 168} style={{ flex: 1.2 }} disabled={locked || chung.accT < major.tenths} onTap={() => api.tap('chung', major.code)} onUndo={() => api.undo('chung', major.code)} undoDisabled={locked} />
+          <DeductionPad side="solo" kind="minor" value={minor.tenths / 10} count={chung.minor} height={twoCol ? 260 : wide ? 200 : 168} style={{ flex: 1 }} disabled={locked || chung.accT < minor.tenths} onTap={() => api.tap('chung', minor.code)} onUndo={() => api.undo('chung', minor.code)} undoDisabled={locked} />
         </View>
         <View style={styles.accRow}>
           <Txt v="caption" color="inkMuted" style={{ flex: 1 }}>Tap the round counter on a key to remove one of that deduction.</Txt>
@@ -82,17 +82,21 @@ export function ScoringCutoff() {
             <Txt v="scoreLg">{f1(chung.accuracy)}</Txt>
           </View>
         </View>
+        </View>
+        <View style={{ gap: space[3], flex: twoCol ? 1 : undefined, paddingTop: twoCol ? space[2] : 0 }}>
+          {twoCol ? <Txt v="overline" color="inkMuted">Presentation · tap a score to open the number grid</Txt> : null}
         {rules.criteria.map((cr, i) => (
           <View key={cr.code} style={styles.crit}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Txt v="label">{cr.short}</Txt>
               <Txt v="caption" color="inkMuted">{cr.sub ?? `${(cr.minTenths / 10).toFixed(1)} – ${(cr.maxTenths / 10).toFixed(1)}`}</Txt>
             </View>
-            <View style={{ width: 164 }}>
+            <View style={{ width: twoCol ? 220 : 164 }}>
               <ScoreChip side="solo" compact label={cr.short} value={chung.criteria[i]} disabled={locked} onPress={() => setGrid(true)} />
             </View>
           </View>
         ))}
+        </View>
       </ScrollView>
 
       {correction && sendState !== 'sent' ? (
@@ -107,24 +111,6 @@ export function ScoringCutoff() {
         )}
       </View>
 
-      <Modal visible={sheet === 'receipt'} transparent animationType="slide" onRequestClose={() => setSheet('closed')} supportedOrientations={['portrait', 'landscape']}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={() => setSheet('closed')} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.hairline, paddingBottom: insets.bottom + space[4] }, wide && { alignSelf: 'center', width: 560 }]}>
-          <View style={[styles.grab, { backgroundColor: c.controlBorder }]} />
-          <KeypadCapture onAction={onKeypad} active={sheet !== 'closed'} />
-          <View style={{ alignItems: 'center', gap: space[3] }}>
-              <View style={[styles.okm, { backgroundColor: c.okSoft, borderColor: c.ok }]}><Icon name="check" size={34} stroke={2.5} color={c.okText} /></View>
-              <Txt v="title">Received by the server</Txt>
-              <View style={[styles.ids, { backgroundColor: c.surfaceRaised }]}>
-                <Txt v="mono" color="inkMuted">Received</Txt><Txt v="mono">{receiptTime(receipt?.receivedAt)} · {cur.ring}</Txt>
-                <Txt v="mono" color="inkMuted">Submission</Txt><Txt v="mono">J{s.me?.judgeNo} · rev {receipt?.revision} · {receipt?.submissionId}</Txt>
-                <Txt v="mono" color="inkMuted">Total</Txt><Txt v="mono">{f1(chung.total)}</Txt>
-              </View>
-              <Txt v="caption" color="inkMuted" style={{ textAlign: 'center' }}>This device is locked for this form. If a score is wrong, raise your hand: only the chief referee can open a correction.</Txt>
-              <Button label="Done" icon="check" variant="secondary" size="lg" block onPress={() => setSheet('closed')} />
-          </View>
-        </View>
-      </Modal>
       {grid ? (
         <ScoreGrid side="solo" title={`${cur.chung.name} (${cur.chung.nat})`}
           pages={[{ title: 'Presentation', rows: rules.criteria.map((cr, i) => ({ key: String(i), label: cr.short, sub: cr.sub, min: cr.minTenths, max: cr.maxTenths, value: chung.criteria[i] })) }]}
@@ -144,8 +130,4 @@ const styles = StyleSheet.create({
   accRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2 },
   crit: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   foot: { borderTopWidth: 1, paddingHorizontal: space[4], paddingTop: space[3], gap: 10, marginTop: 'auto' },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, borderWidth: 1, padding: space[4], gap: space[3] },
-  grab: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3 },
-  okm: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  ids: { alignSelf: 'stretch', borderRadius: radius.sm, padding: space[3], gap: 2 },
 });

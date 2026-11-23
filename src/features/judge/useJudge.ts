@@ -39,13 +39,16 @@ export function useJudge() {
   const hong = side('hong');
   const complete = sides.every((sd) => (sd === 'chung' ? chung : hong).total != null);
   const paused = !!cur?.paused;
-  const locked = s.myDraft.sendState === 'sent' || s.myDraft.sendState === 'sending' || cur?.status !== 'OPEN' || paused;
+  // Called / on the mat, or scoring open but the operator has not started the form yet.
+  const waiting = !!cur && (cur.status === 'CALLED' || cur.status === 'ON_MAT' || (cur.status === 'OPEN' && !paused && !cur.clockRunning && cur.clockSec === 0));
+  const locked = s.myDraft.sendState === 'sent' || s.myDraft.sendState === 'sending' || cur?.status !== 'OPEN' || paused || waiting;
 
   // One press sends, as on the judge tablet manual ("Check the score and send").
   const sendState: SendState =
     s.myDraft.sendState === 'sent' ? 'sent'
       : s.myDraft.sendState === 'sending' ? 'sending'
         : paused ? 'paused'
+          : waiting ? 'waiting'
           : s.myDraft.sendState === 'failed' ? 'failed'
             : !complete ? 'incomplete' : 'ready';
 
@@ -55,7 +58,14 @@ export function useJudge() {
   }
 
   const correction = s.correction && s.correction.judgeNo === judgeNo ? s.correction : null;
-  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, paused, sendState, pressSend };
+    // One line under the match bar telling the judge why the screen is locked.
+  const notice: { icon: 'clock' | 'pause' | 'check'; text: string } | null =
+    paused ? { icon: 'pause', text: 'Paused by the operator. Scoring is locked.' }
+      : waiting ? { icon: 'clock', text: 'Waiting for the operator to start…' }
+        : s.myDraft.sendState === 'sent' && cur?.status !== 'RELEASED' ? { icon: 'check', text: 'Sent. Waiting for the other referees and the operator.' }
+          : null;
+
+  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, paused, waiting, notice, sendState, pressSend };
 }
 
 export function receiptTime(iso: string | undefined) {

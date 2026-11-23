@@ -26,7 +26,7 @@ export const KEYPAD_MAP: { keys: string; action: string }[] = [
   { keys: '4 / 6', action: '−0.1 minor deduction (left / right athlete)' },
   { keys: '1 / 3', action: 'Undo last deduction (left / right athlete)' },
   { keys: 'Enter', action: 'Send score (OK in the number grid)' },
-  { keys: '0  or  .', action: 'Close the number grid or receipt' },
+  { keys: '0  or  .', action: 'Close the number grid' },
 ];
 
 export function keyToAction(key: string): KeypadAction | null {

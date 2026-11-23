@@ -22,7 +22,8 @@ export default function JudgeHome() {
   const { width, height } = useWindowDimensions();
   const phone = Math.min(width, height) < 600;
   const cur = s.current;
-  const scoringVisible = !!cur && (cur.status === 'OPEN' || (s.myDraft.sendState !== 'idle' && ['COMPLETE', 'WITH_RIC', 'RELEASED'].includes(cur.status)));
+  // The scoring screen shows (locked) from the moment the athletes are called, so the judge sees who is next.
+  const scoringVisible = !!cur && (['CALLED', 'ON_MAT', 'OPEN'].includes(cur.status) || (s.myDraft.sendState !== 'idle' && ['COMPLETE', 'WITH_RIC', 'RELEASED'].includes(cur.status)));
   // Three scoring layouts: PK (Chung vs Hong), Recognized Cut-off (one entry) and Freestyle (one entry, no deduction keys).
   const mode = !scoringVisible ? 'standby' : cur!.format === 'PK' ? 'pk' : s.rules.discipline === 'FREESTYLE' ? 'freestyle' : 'cutoff';
 

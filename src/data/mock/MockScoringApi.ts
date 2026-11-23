@@ -186,7 +186,7 @@ export class MockScoringApi implements ScoringApi {
   }
 
   private judgeCanScore() {
-    return !!this.s.me && this.s.current?.status === 'OPEN' && !this.s.current.paused && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
+    return !!this.s.me && this.s.current?.status === 'OPEN' && !this.s.current.paused && (this.s.current.clockRunning || this.s.current.clockSec > 0) && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
       && (!this.s.correction || this.s.correction.judgeNo === this.s.me.judgeNo);
   }
 

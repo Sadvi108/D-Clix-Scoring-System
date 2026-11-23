@@ -106,7 +106,7 @@ function Referee() {
       </View>
       {cur ? sides.map((sd) => (
         <View key={sd} style={[styles.res, { backgroundColor: sd === 'hong' ? c.hongSoft : c.chungSoft }]}>
-          <Txt v="overline" color={tone(sd)}>
+          <Txt v="overline" color={tone(sd)} numberOfLines={1} style={{ flexShrink: 1, marginRight: space[2] }}>
             {sd === 'hong' ? `Hong · ${cur.hong?.nat}` : cur.format === 'PK' ? `Chung · ${cur.chung.nat}` : `${cur.chung.entryId} · ${cur.chung.name}`}
           </Txt>
           <Txt v="scoreXl" style={{ fontSize: 34, lineHeight: 36 }}>{r?.sides[sd] ? r.sides[sd]!.final.toFixed(4) : '–.––––'}</Txt>

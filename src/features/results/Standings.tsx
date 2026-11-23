@@ -99,8 +99,9 @@ function RoundView({ round: r, rounds, categoryName, wide, onOpenRound }: { roun
 
       <Notice text={msg?.text ?? null} tone={msg?.tone} />
 
+      {tie && !confirmed ? <Notice text={`A tie ${isFinal ? 'for a medal' : 'at the cut line'} must be settled first. The chief referee decides it here or on the game screen (choose the winner or order a rematch).`} /> : null}
       {r.status === 'SCORED' ? (
-        <Button label={isFinal ? 'Confirm final standings' : `Confirm qualification · ${r.advanceCount} advance`} icon="check" size="lg" block disabled={!!tie} onPress={confirm} />
+        <Button label={isFinal ? 'Confirm final standings' : `Confirm qualifiers · top ${r.advanceCount}`} icon="check" size="lg" block disabled={!!tie} onPress={confirm} />
       ) : null}
       {r.status === 'READY' ? (
         <Button label={`Send ${r.name} to ${s.ring.name} queue`} icon="send" size="lg" block onPress={() => run(api.scheduleRound(r.id), `${r.name} added to the ${s.ring.name} queue.`)} />
@@ -118,6 +119,9 @@ function EmptyRound({ round }: { round: CategoryRound }) {
 
 function StandingsTable({ round, standings, quals, confirmed, wide }: { round: CategoryRound; standings: Standing[]; quals: string[]; confirmed: boolean; wide: boolean }) {
   const { c } = useTheme();
+  const s = useScoring();
+  // Why an entry left the round: a walkover recorded on any of its games.
+  const outReason = (entryId: string) => s.queue.find((q) => q.roundId === round.id && q.chung.entryId === entryId && q.walkover)?.walkover?.reason ?? null;
   const n = round.advanceCount;
   const ranked = standings.filter((x) => x.complete);
   const lineAfter = n != null && ranked.length > n ? ranked[n - 1].entry.entryId : null;
@@ -137,7 +141,10 @@ function StandingsTable({ round, standings, quals, confirmed, wide }: { round: C
         return (
           <View key={row.entry.entryId}>
             <View style={[st.tr, { borderBottomColor: c.hairline, backgroundColor: row.tied ? c.alertSoft : 'transparent' }]}>
-              <Txt v="scoreMd" color={row.rank ? 'ink' : 'inkMuted'} style={[st.rank, { fontSize: 20 }]}>{row.rank ?? '–'}</Txt>
+              <View style={st.rank}>
+                <Txt v="scoreMd" color={row.rank ? 'ink' : 'inkMuted'} style={{ fontSize: 20 }}>{row.rank ?? '–'}</Txt>
+                {row.tied ? <Txt v="overline" color="alertText" style={{ fontSize: 9 }}>Tie</Txt> : null}
+              </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Txt v="label" numberOfLines={1} style={row.withdrawn && { textDecorationLine: 'line-through' }}>{row.entry.name}</Txt>
                 <Txt v="caption" color="inkMuted" style={{ fontSize: 11 }}>{row.entry.nat} · {row.entry.entryId}</Txt>
@@ -145,9 +152,10 @@ function StandingsTable({ round, standings, quals, confirmed, wide }: { round: C
               {showForms ? row.forms.map((v, i) => <Txt key={i} v="mono" color={v == null ? 'inkMuted' : 'ink'} style={st.num}>{v == null ? '—' : v.toFixed(2)}</Txt>) : null}
               <Txt v="scoreMd" style={[st.num, { fontSize: 18 }]}>{row.average == null ? (row.withdrawn ? '' : `${row.forms.filter((x) => x != null).length}/${round.forms.length}`) : f4(row.average)}</Txt>
               <View style={st.tag}>
-                {row.withdrawn ? <RuleBadge tone="unconfigured" label="WDR" />
-                  : row.tied ? <RuleBadge tone="pending" label="Tie" />
-                    : q ? <RuleBadge tone={confirmed ? 'released' : 'approved'} label="Q" /> : null}
+                {row.withdrawn ? <RuleBadge tone={outReason(row.entry.entryId) === 'Disqualified' ? 'pending' : 'unconfigured'} label={outReason(row.entry.entryId) === 'Disqualified' ? 'Disqualified' : outReason(row.entry.entryId) === 'Did not appear' ? 'No-show' : 'Withdrawn'} />
+                  : !row.complete ? <RuleBadge tone="unconfigured" label="Not scored yet" />
+                    : row.tied ? <RuleBadge tone="pending" label="Tie" />
+                      : q ? <RuleBadge tone={confirmed ? 'released' : 'approved'} label={confirmed ? 'Qualified' : 'Q'} /> : null}
               </View>
             </View>
             {lineAfter === row.entry.entryId ? (
@@ -275,5 +283,5 @@ const st = {
   tr: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space[2], paddingHorizontal: space[3], minHeight: 52, borderBottomWidth: 1 },
   rank: { width: 40 },
   num: { width: 72, textAlign: 'right' as const },
-  tag: { width: 48, alignItems: 'flex-end' as const },
+  tag: { width: 112, alignItems: 'flex-end' as const },
 };

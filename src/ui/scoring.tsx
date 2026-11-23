@@ -135,7 +135,7 @@ export function ScoreSummary({ accuracy, presentation, deduction, compact, align
   );
 }
 
-export type SendState = 'incomplete' | 'ready' | 'confirm' | 'sending' | 'sent' | 'failed' | 'paused';
+export type SendState = 'incomplete' | 'ready' | 'confirm' | 'sending' | 'sent' | 'failed' | 'paused' | 'waiting';
 const SEND: Record<SendState, { label: string; icon: IconName; off?: boolean }> = {
   incomplete: { label: 'Score every item to send', icon: 'pencil', off: true },
   ready: { label: 'Send', icon: 'send' },
@@ -144,6 +144,7 @@ const SEND: Record<SendState, { label: string; icon: IconName; off?: boolean }> 
   sent: { label: 'Sent · locked', icon: 'lock', off: true },
   failed: { label: 'Not sent — tap to retry', icon: 'alert' },
   paused: { label: 'Paused · scoring locked', icon: 'pause', off: true },
+  waiting: { label: 'Waiting for the operator', icon: 'clock', off: true },
 };
 
 export function SendButton({ state, label, detail, onPress, compact, style }: { state: SendState; label?: string; detail?: string | null; onPress?: () => void; compact?: boolean; style?: StyleProp<ViewStyle> }) {
@@ -157,6 +158,7 @@ export function SendButton({ state, label, detail, onPress, compact, style }: { 
     sent: { bg: c.okSoft, fg: c.okText, border: c.ok, dashed: false },
     failed: { bg: c.alertSoft, fg: c.alertText, border: c.alert, dashed: false },
     paused: { bg: c.surfaceRaised, fg: c.inkMuted, border: c.controlBorder, dashed: true },
+    waiting: { bg: c.surfaceRaised, fg: c.inkMuted, border: c.controlBorder, dashed: true },
   }[state];
   return (
     <Pressable
@@ -203,10 +205,11 @@ const styles = StyleSheet.create({
 /** Full-width notice under the match bar while the judge cannot score (paused by the operator). */
 export function LockBanner({ text, icon = 'pause' }: { text: string; icon?: IconName }) {
   const { c } = useTheme();
+  const ok = icon === 'check';
   return (
-    <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: c.goldSoft, borderColor: c.gold }]}>
-      <Icon name={icon} size={18} color={c.goldText} />
-      <Txt v="label" color="goldText" style={{ flexShrink: 1 }}>{text}</Txt>
+    <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: ok ? c.okSoft : c.goldSoft, borderColor: ok ? c.ok : c.gold }]}>
+      <Icon name={icon} size={18} color={ok ? c.okText : c.goldText} />
+      <Txt v="label" color={ok ? 'okText' : 'goldText'} style={{ flexShrink: 1 }}>{text}</Txt>
     </View>
   );
 }

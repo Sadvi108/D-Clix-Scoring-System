@@ -8,7 +8,7 @@ import { api, useScoring } from '@/data';
 import { judgeStates, lifecycleSteps } from '@/features/officials/helpers';
 import { canOperate } from '@/features/session/session';
 import { PenaltySheet, ProvisionalResult, SeatSheet, WalkoverSheet } from '@/features/officials/GameActions';
-import type { Side } from '@/core/types';
+import type { Performance, Side } from '@/core/types';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { AthletePlate, MatchBar, mmss } from '@/ui/match';
@@ -81,30 +81,52 @@ function Operator() {
     }
   })();
 
+  // Queue in three parts, as on the venue's ring sheet: finished games (newest first), the game on the mat, what comes next.
+  const finished = s.queue.filter((q) => q.id !== cur?.id && (q.status === 'RELEASED' || q.status === 'WITHDRAWN')).reverse();
+  const upcoming = s.queue.filter((q) => q.id !== cur?.id && q.status === 'QUEUED');
+  const outcome = (q: Performance): string | null => {
+    if (q.walkover && q.format === 'PK' && q.hong) return `Winner: ${(q.walkover.absent === 'chung' ? q.hong : q.chung).name}`;
+    if (q.walkover) return q.walkover.reason;
+    if (q.format === 'PK') {
+      const b = s.results.bouts.find((x) => x.performanceId === q.id);
+      return b?.winner ? `Winner: ${(b.winner === 'chung' ? q.chung : q.hong!).name}` : null;
+    }
+    const sc = s.results.scores.find((x) => x.performanceId === q.id);
+    return sc ? `Score ${sc.final.toFixed(3)}` : null;
+  };
+  const tagFor = (q: Performance) =>
+    q.status === 'WITHDRAWN' ? (q.walkover ? (q.walkover.reason === 'Did not appear' ? 'No-show' : q.walkover.reason === 'Disqualified' ? 'DQ' : 'Walkover') : 'Withdrawn')
+      : q.status === 'RELEASED' ? 'Released' : q.id === cur?.id ? 'Now' : matFree && q.status === 'QUEUED' ? 'Call ›' : 'Queued';
+  const row = (q: Performance, part: 'prev' | 'now' | 'next') => {
+    const callable = part === 'next' && matFree;
+    const out = q.status === 'WITHDRAWN';
+    const tag = tagFor(q);
+    const line2 = part === 'prev' ? outcome(q) : `${q.format === 'PK' ? 'PK' : q.roundId === 'R-FSP-F' || q.form.startsWith('Freestyle') ? 'Freestyle' : 'Cut-off'} · ${q.round} · ${q.form}`;
+    return (
+      <Pressable key={q.id} disabled={!callable} onPress={() => call(q.id)} accessibilityRole="button" accessibilityLabel={`Match ${q.matchNo}, ${tag}`}
+        style={({ pressed }) => [styles.q, pressed && { opacity: 0.7 }, { borderColor: part === 'now' ? c.gold : c.hairline, backgroundColor: part === 'now' ? c.goldSoft : part === 'prev' ? 'transparent' : c.surfaceRaised }]}>
+        <Txt v="scoreMd" color={part === 'prev' ? 'inkMuted' : 'ink'} style={{ width: 52, fontSize: 20 }}>{q.matchNo}</Txt>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {q.format === 'PK' && q.hong ? (
+            <Txt v="label" numberOfLines={1} style={out && { textDecorationLine: 'line-through' }}>
+              <Txt v="label" color="chungText">{q.chung.name.split(' ').slice(-1)[0]}</Txt> vs <Txt v="label" color="hongText">{q.hong.name.split(' ').slice(-1)[0]}</Txt>
+            </Txt>
+          ) : <Txt v="label" color="chungText" numberOfLines={1} style={out && { textDecorationLine: 'line-through' }}>{q.chung.name}</Txt>}
+          {line2 ? <Txt v="caption" color={part === 'prev' ? 'ink' : 'inkMuted'} numberOfLines={1} style={{ fontSize: 11 }}>{line2}</Txt> : null}
+        </View>
+        <Txt v="overline" color={tag === 'Released' ? 'okText' : out ? 'alertText' : part === 'now' ? 'goldText' : callable ? 'ink' : 'inkMuted'} style={{ fontSize: 10 }}>{tag}</Txt>
+      </Pressable>
+    );
+  };
+  const section = (label: string) => <Txt v="overline" color="inkMuted" style={{ fontSize: 10, marginTop: 4 }}>{label}</Txt>;
+
   const queue = (
     <Panel style={{ width: wide ? 340 : undefined, flexShrink: 0 }}>
       <View style={styles.ph}><Txt v="overline" color="inkMuted">{s.ring.name} queue</Txt><Txt v="caption" color="inkMuted">{s.ring.session}</Txt></View>
-      {s.queue.map((q) => {
-        const isCur = q.id === cur?.id;
-        const done = q.status === 'RELEASED';
-        const out = q.status === 'WITHDRAWN';
-        const callable = matFree && q.status === 'QUEUED';
-        return (
-          <Pressable key={q.id} disabled={!callable} onPress={() => call(q.id)} accessibilityRole="button" accessibilityLabel={`Call match ${q.matchNo}`}
-            style={({ pressed }) => [styles.q, pressed && { opacity: 0.7 }, { borderColor: isCur ? c.gold : c.hairline, backgroundColor: isCur ? c.goldSoft : done ? 'transparent' : c.surfaceRaised }]}>
-            <Txt v="scoreMd" style={{ width: 46, fontSize: 20 }}>{q.matchNo}</Txt>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {q.format === 'PK' && q.hong ? (
-                <Txt v="label" numberOfLines={1} style={out && { textDecorationLine: 'line-through' }}>
-                  <Txt v="label" color="chungText">{q.chung.name.split(' ').slice(-1)[0]}</Txt> vs <Txt v="label" color="hongText">{q.hong.name.split(' ').slice(-1)[0]}</Txt>
-                </Txt>
-              ) : <Txt v="label" color="chungText" numberOfLines={1}>{q.chung.name}</Txt>}
-              <Txt v="caption" color="inkMuted" style={{ fontSize: 11 }}>{q.format === 'PK' ? 'PK' : q.roundId === 'R-FSP-F' || q.form.startsWith('Freestyle') ? 'Freestyle' : 'Cut-off'} · {q.form}</Txt>
-            </View>
-            <Txt v="overline" color={done ? 'okText' : isCur ? 'goldText' : callable ? 'ink' : 'inkMuted'} style={{ fontSize: 10 }}>{out ? (q.walkover ? (q.walkover.reason === 'Did not appear' ? 'No-show' : q.walkover.reason === 'Disqualified' ? 'DQ' : 'Walkover') : 'Withdrawn') : done ? 'Released' : isCur ? 'Now' : callable ? 'Call ›' : 'Queued'}</Txt>
-          </Pressable>
-        );
-      })}
+      {finished.length ? <>{section('Previous')}{finished.slice(0, 4).map((q) => row(q, 'prev'))}</> : null}
+      {cur ? <>{section('Now')}{row(cur, 'now')}</> : null}
+      {section(upcoming.length ? 'Next' : 'Next · nothing queued')}
+      {upcoming.map((q) => row(q, 'next'))}
     </Panel>
   );
 
