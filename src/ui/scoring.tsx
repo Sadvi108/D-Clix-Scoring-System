@@ -135,7 +135,7 @@ export function ScoreSummary({ accuracy, presentation, deduction, compact, align
   );
 }
 
-export type SendState = 'incomplete' | 'ready' | 'confirm' | 'sending' | 'sent' | 'failed';
+export type SendState = 'incomplete' | 'ready' | 'confirm' | 'sending' | 'sent' | 'failed' | 'paused';
 const SEND: Record<SendState, { label: string; icon: IconName; off?: boolean }> = {
   incomplete: { label: 'Score every item to send', icon: 'pencil', off: true },
   ready: { label: 'Send', icon: 'send' },
@@ -143,6 +143,7 @@ const SEND: Record<SendState, { label: string; icon: IconName; off?: boolean }> 
   sending: { label: 'Sending…', icon: 'refresh', off: true },
   sent: { label: 'Sent · locked', icon: 'lock', off: true },
   failed: { label: 'Not sent — tap to retry', icon: 'alert' },
+  paused: { label: 'Paused · scoring locked', icon: 'pause', off: true },
 };
 
 export function SendButton({ state, label, detail, onPress, compact, style }: { state: SendState; label?: string; detail?: string | null; onPress?: () => void; compact?: boolean; style?: StyleProp<ViewStyle> }) {
@@ -155,6 +156,7 @@ export function SendButton({ state, label, detail, onPress, compact, style }: { 
     sending: { bg: c.surfaceRaised, fg: c.inkMuted, border: c.surfaceRaised, dashed: false },
     sent: { bg: c.okSoft, fg: c.okText, border: c.ok, dashed: false },
     failed: { bg: c.alertSoft, fg: c.alertText, border: c.alert, dashed: false },
+    paused: { bg: c.surfaceRaised, fg: c.inkMuted, border: c.controlBorder, dashed: true },
   }[state];
   return (
     <Pressable
@@ -186,6 +188,7 @@ export function SendButton({ state, label, detail, onPress, compact, style }: { 
 
 const styles = StyleSheet.create({
   key: { borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  banner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[2], marginHorizontal: space[4], marginTop: space[2], paddingVertical: 10, paddingHorizontal: space[4], borderRadius: radius.md, borderWidth: 1.5 },
   undo: { position: 'absolute', borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   chip: { flex: 1, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   count: { position: 'absolute', top: 10, minWidth: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
@@ -196,3 +199,14 @@ const styles = StyleSheet.create({
   send: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[3], paddingHorizontal: space[5], borderRadius: radius.md, borderWidth: 2 },
   detail: { borderLeftWidth: 1.5, paddingLeft: space[3] },
 });
+
+/** Full-width notice under the match bar while the judge cannot score (paused by the operator). */
+export function LockBanner({ text, icon = 'pause' }: { text: string; icon?: IconName }) {
+  const { c } = useTheme();
+  return (
+    <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: c.goldSoft, borderColor: c.gold }]}>
+      <Icon name={icon} size={18} color={c.goldText} />
+      <Txt v="label" color="goldText" style={{ flexShrink: 1 }}>{text}</Txt>
+    </View>
+  );
+}

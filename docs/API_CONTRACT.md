@@ -80,7 +80,12 @@ QUEUED → CALLED → ON_MAT → OPEN → COMPLETE → WITH_RIC → RELEASED
 | --- | --- | --- | --- | --- |
 | `signInJudge(seat, pin)` | `POST /poomsae/auth/judge` | `{ seat, pin, deviceId }` | `{ token, assignment }` | PIN tied to one assignment; lock after 5 failures; new sign-in ends older session on that seat |
 | `signInWithCode(code)` | `POST /poomsae/auth/judge-code` | `{ code, deviceId }` | same | QR code single-use, expires in 60 s |
-| `autoSignIn(seat)` | — | — | — | Prototype only (no credentials). The real app turns `AUTO_SIGN_IN` off in `src/config.ts`; no endpoint needed |
+| `autoSignIn(seat)` | — | — | — | Prototype only (no credentials), off by default (`AUTO_SIGN_IN` in `src/config.ts`); no endpoint needed |
+| `signInPin(pin)` | POST | `/poomsae/auth/pin` | `{ pin }` → `{ token, officialId, name, role: 'JUDGE'\|'CHIEF'\|'OPERATOR' }` | One 6-digit PIN per official; the PIN decides the role |
+| `takeSeat(ringId, judgeNo)` | POST | `/poomsae/rings/{ringId}/seats/{judgeNo}` | → `{ assignmentId }` | 409 if the seat is taken |
+| `chooseRing(ringId)` | POST | `/poomsae/rings/{ringId}/open` | → 204 | Operator or chief opens a ring |
+| `setPaused(paused)` | POST | `/poomsae/attempt/pause` | `{ paused }` | Locks every judge and stops the clock |
+| `stopGame(reason)` | POST | `/poomsae/attempt/stop` | `{ reason }` | Ends the game early; judges who sent keep their score |
 | `signOut()` | `POST /poomsae/auth/logout` | — | `204` | |
 | (load) | `GET /poomsae/attempt/current` | — | `{ performance, myEvents, mySubmission }` | Only the judge's own data |
 | `tap(side, code)` | `POST /poomsae/event` | `{ performanceId, side, type: "TAP", deductionCode, clientRequestId }` | `ScoreEvent` | Performance must be OPEN; reject if accuracy would go below 0; idempotent on `clientRequestId` |

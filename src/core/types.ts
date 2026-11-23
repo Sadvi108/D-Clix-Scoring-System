@@ -41,6 +41,10 @@ export interface Performance {
   roundId?: string; // CategoryRound this performance belongs to
   clockSec: number;
   clockRunning: boolean;
+  /** Operator paused the game: clock stopped and judges locked until resumed. */
+  paused?: boolean;
+  /** Operator stopped the game early (e.g. injury); judges who had not sent are locked out. */
+  stopReason?: string | null;
 }
 
 export interface JudgeAssignment {
@@ -216,4 +220,25 @@ export interface AuditEntry {
   area: 'SCORING' | 'RESULTS' | 'SETUP';
   target: string;
   detail?: string;
+}
+
+// ---------------- Sign-in and rings ----------------
+
+/** What a 6-digit PIN signs in as. The PIN decides the role; the device does not. */
+export type AccountRole = 'JUDGE' | 'CHIEF' | 'OPERATOR';
+
+export interface Account {
+  officialId: string;
+  name: string;
+  role: AccountRole;
+}
+
+/** One ring of the venue as the ring picker shows it. */
+export interface RingInfo {
+  id: string;
+  name: string;
+  /** A ring operator is signed in on this ring. */
+  operatorIn: boolean;
+  /** Judge seats of the ring panel and who sits in each (null = free). */
+  seats: { judgeNo: number; takenBy: string | null }[];
 }

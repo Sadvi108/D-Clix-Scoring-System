@@ -1,5 +1,5 @@
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Side } from '@/core/types';
 import { api, useScoring } from '@/data';
 import { hhmmss, judgeStates } from '@/features/officials/helpers';
+import { accountFor } from '@/features/session/session';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { MatchBar } from '@/ui/match';
@@ -15,6 +16,8 @@ import { Button, Icon, Panel, RuleBadge, StatusPill, Txt, f1 } from '@/ui/primit
 import { Notice } from '@/ui/console';
 
 export default function RefereeScreen() {
+  const s = useScoring();
+  if (!accountFor(s, 'CHIEF')) return <Redirect href={{ pathname: '/sign-in', params: { next: 'referee' } }} />;
   return (
     <ThemeProvider name="daylight">
       <StatusBar style="dark" />
@@ -146,6 +149,7 @@ function Referee() {
             {complete ? <StatusPill status="sent" label="Panel complete" /> : <StatusPill status="waiting" label={cur?.status === 'OPEN' ? 'Scoring open' : 'Waiting'} />}
           </View>
           <JudgeStatusGrid judges={judgeStates(s)} chipWidth={wide ? 80 : 60} />
+          {cur?.stopReason ? <Notice text={`Stopped by the operator: ${cur.stopReason}. ${s.submissions.length} of ${s.judges.length} judges sent before the stop.${s.submissions.length ? '' : ' No scores to release.'}`} /> : null}
           {s.correction ? <Notice tone="info" text={`Correction open · Judge ${s.correction.judgeNo} is re-scoring (${s.correction.reason}). The result is recalculated when the new revision arrives.`} /> : null}
           {s.rules.trimMode !== 'APPROVED' ? (
             <View style={[styles.banner, { backgroundColor: c.alertSoft, borderColor: c.alert }]}>

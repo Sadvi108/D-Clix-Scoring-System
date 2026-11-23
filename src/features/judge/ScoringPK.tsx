@@ -9,7 +9,7 @@ import { useTheme } from '@/theme/ThemeContext';
 import { space } from '@/theme/tokens';
 import { AthletePlate, FormClock, MatchBar, mmss } from '@/ui/match';
 import { Button, Txt, f1 } from '@/ui/primitives';
-import { DeductionPad, ScoreChip, SendButton } from '@/ui/scoring';
+import { DeductionPad, LockBanner, ScoreChip, SendButton } from '@/ui/scoring';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { usePkSides, toggleSides } from './sideLayout';
@@ -23,7 +23,7 @@ export function ScoringPK() {
   useKeepAwake();
   const router = useRouter();
   const { c } = useTheme();
-  const { s, cur, chung, hong, locked, sendState, pressSend, correction } = useJudge();
+  const { s, cur, chung, hong, locked, paused, sendState, pressSend, correction } = useJudge();
   const { width, height } = useWindowDimensions();
   const compact = height < 560; // phone in landscape
   const [bodyH, setBodyH] = useState(0);
@@ -69,6 +69,7 @@ export function ScoringPK() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right', 'bottom']}>
       <KeypadCapture onAction={onKeypad} active={!grid} />
       <MatchBar onHome={() => router.replace('/')} compact={compact} matchNo={cur.matchNo} ring={cur.ring} category={compact ? `${cur.category.replace('Male Under', 'Male U')} · ${cur.round.replace('Round of ', 'R')}` : cur.category} round={cur.round} judgeNo={s.me?.judgeNo} connection={s.connection === 'sending' ? 'sending' : 'online'} />
+      {paused ? <LockBanner text="Paused by the operator. Scoring is locked." /> : null}
       <View style={[styles.plates, { paddingHorizontal: space[4], paddingTop: compact ? 6 : 12, gap }]}>
         <View style={{ flex: 1, minWidth: 0 }}><AthletePlate side={L} mirror={false} athlete={athlete(L)} accuracy={by(L).accuracy} presentation={by(L).presentation} compact={compact} /></View>
         <FormClock time={mmss(cur.clockSec)} form={cur.form} formNo={cur.formNo} formCount={cur.formCount} compact={compact} running={cur.clockRunning} />

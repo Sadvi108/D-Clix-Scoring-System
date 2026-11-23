@@ -56,7 +56,8 @@ on the role menu starts over. Tap any queued bout on the operator screen to call
 src/
   app/                 Routes (Expo Router)
     index.tsx            Role menu
-    judge/sign-in.tsx    QR / PIN sign-in (off in the prototype: AUTO_SIGN_IN in src/config.ts)
+    sign-in.tsx          6-digit PIN sign-in for every official (the PIN decides the role)
+    rings.tsx            Choose your ring (operator, chief) or ring and seat (judge)
     judge/index.tsx      Standby → PK or Cut-off scoring (locks orientation on phones)
     operator.tsx         Ring operator console
     referee.tsx          Chief referee monitor + release
@@ -87,8 +88,10 @@ IBM Plex Sans for text.
 
 ## Open items before production
 
-- Judge login is switched off for the prototype (`AUTO_SIGN_IN = true` in `src/config.ts`):
-  every device signs in as Judge 3. Set it to `false` to bring back the QR / PIN screen.
+- Sign-in uses demo 6-digit PINs (judge 111111, ring operator 222222, chief referee 333333).
+  The backend must issue real PINs (`POST /poomsae/auth/pin`). The demo lets one tablet hold several
+  sign-ins so a single tester can play every role; a real tablet holds one. Rings B and C share
+  Ring A's sample games.
 
 - Trim method, criterion min/step, tie-break and Freestyle criteria await rule sign-off
   (shown in the app as DRAFT / pending).

@@ -38,14 +38,16 @@ export function useJudge() {
   const chung = side('chung');
   const hong = side('hong');
   const complete = sides.every((sd) => (sd === 'chung' ? chung : hong).total != null);
-  const locked = s.myDraft.sendState === 'sent' || s.myDraft.sendState === 'sending' || cur?.status !== 'OPEN';
+  const paused = !!cur?.paused;
+  const locked = s.myDraft.sendState === 'sent' || s.myDraft.sendState === 'sending' || cur?.status !== 'OPEN' || paused;
 
   // One press sends, as on the judge tablet manual ("Check the score and send").
   const sendState: SendState =
     s.myDraft.sendState === 'sent' ? 'sent'
       : s.myDraft.sendState === 'sending' ? 'sending'
-        : s.myDraft.sendState === 'failed' ? 'failed'
-          : !complete ? 'incomplete' : 'ready';
+        : paused ? 'paused'
+          : s.myDraft.sendState === 'failed' ? 'failed'
+            : !complete ? 'incomplete' : 'ready';
 
   async function pressSend() {
     if (sendState === 'ready' || sendState === 'failed') return api.submit();
@@ -53,7 +55,7 @@ export function useJudge() {
   }
 
   const correction = s.correction && s.correction.judgeNo === judgeNo ? s.correction : null;
-  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, sendState, pressSend };
+  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, paused, sendState, pressSend };
 }
 
 export function receiptTime(iso: string | undefined) {

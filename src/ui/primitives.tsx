@@ -48,6 +48,9 @@ const PATHS: Record<string, string[]> = {
   cable: ['M7 9h10v4a5 5 0 0 1-10 0z', 'M9.5 9V4', 'M14.5 9V4', 'M12 18v3'],
   keypad: ['M3 6h18v12H3z', 'M7 10h.01', 'M11 10h.01', 'M15 10h.01', 'M17 10h.01', 'M7 14h.01', 'M17 14h.01', 'M10 14h4'],
   link: ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
+  pause: ['M9 5v14', 'M15 5v14'],
+  play: ['M7 5l12 7-12 7z'],
+  stop: ['M6 6h12v12H6z'],
 };
 export type IconName = keyof typeof PATHS;
 export function Icon({ name, size = 20, color, stroke = 2 }: { name: IconName; size?: number; color?: string; stroke?: number }) {

@@ -21,8 +21,9 @@ const ROLES: { href: Href; icon: IconName; title: string; who: string; device: s
 
 const STEPS = [
   'Competition setup: rule set, rounds of each category, the 5-judge panel and paired devices',
-  'Ring operator: call match 101, confirm on mat, open scoring',
-  'Judge: opens signed in as Judge 3; score Chung (blue) and Hong (red), send. The ⇄ button swaps sides if Hong sits on your left',
+  'Sign in with a 6-digit PIN (demo: judge 111111, operator 222222, chief 333333). Judges then pick a ring and a free seat; operator and chief pick a ring',
+  'Ring operator: call match 101, confirm on mat, open scoring, start the form. Pause locks every judge; Stop game ends it early (injury)',
+  'Judge: score Chung (blue) and Hong (red), send. The ⇄ button swaps sides if Hong sits on your left',
   'Chief referee: review the panel, request a correction if needed, release',
   'Scoreboard: show the released result',
   'Cut-off: call P-12 (Recognized, one athlete in blue) or F-1 (Freestyle pair: technical + presentation items, no deduction keys)',

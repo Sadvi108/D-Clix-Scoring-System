@@ -29,9 +29,10 @@ export function Standby() {
             <Icon name="clock" size={40} color={c.goldText} stroke={1.75} />
           </View>
           <Txt v="title" style={{ fontSize: 26, lineHeight: 32, textAlign: wide ? 'left' : 'center' }}>
-            {s.current?.status === 'CALLED' || s.current?.status === 'ON_MAT' ? 'Athletes are on their way' : 'Waiting for the ring operator'}
+            {s.current?.stopReason ? 'Game stopped by the operator' : s.current?.status === 'CALLED' || s.current?.status === 'ON_MAT' ? 'Athletes are on their way' : 'Waiting for the ring operator'}
           </Txt>
           <Txt v="body" color="inkMuted" style={{ textAlign: wide ? 'left' : 'center' }}>
+            {s.current?.stopReason ? `Reason: ${s.current.stopReason}. Scoring is closed for this game; the chief referee decides the result. ` : ''}
             Scoring opens here the moment the operator starts the performance. Keep the screen on; you do not need to tap anything.
             {isRotatePrompt ? ' This is a PK bout: scoring opens in landscape, so turn your phone sideways.' : ''}
           </Txt>
@@ -66,8 +67,13 @@ export function Standby() {
         ) : null}
       </ScrollView>
       <View style={styles.foot}>
-        <Txt v="caption" color="inkMuted">Signed in as Judge {s.me?.judgeNo} · {s.me?.name}</Txt>
-        {!AUTO_SIGN_IN ? <Button label="Sign out" icon="signout" variant="ghost" onPress={() => { api.signOut(); router.replace('/judge/sign-in'); }} /> : null}
+        <Txt v="caption" color="inkMuted">Signed in as Judge {s.me?.judgeNo} · {s.me?.name} · {s.ring.name}</Txt>
+        {!AUTO_SIGN_IN ? (
+          <View style={{ flexDirection: 'row', gap: space[2] }}>
+            <Button label="Change seat" icon="swap" variant="ghost" onPress={() => router.replace({ pathname: '/rings', params: { as: 'judge' } })} />
+            <Button label="Sign out" icon="signout" variant="ghost" onPress={() => { api.signOut('JUDGE'); router.replace('/sign-in'); }} />
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );

@@ -9,7 +9,7 @@ import { radius, space } from '@/theme/tokens';
 import { flag } from '@/ui/flag';
 import { MatchBar, mmss } from '@/ui/match';
 import { Button, Icon, Txt, f1 } from '@/ui/primitives';
-import { DeductionPad, ScoreChip, ScoreSummary, SendButton } from '@/ui/scoring';
+import { DeductionPad, LockBanner, ScoreChip, ScoreSummary, SendButton } from '@/ui/scoring';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { receiptTime, useJudge } from './useJudge';
@@ -22,7 +22,7 @@ export function ScoringCutoff() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 700;
-  const { s, cur, chung, locked, sendState, correction } = useJudge();
+  const { s, cur, chung, locked, paused, sendState, correction } = useJudge();
   const [sheet, setSheet] = useState<'closed' | 'receipt'>('closed');
   const [grid, setGrid] = useState(false);
   if (!cur) return null;
@@ -53,6 +53,7 @@ export function ScoringCutoff() {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
       <KeypadCapture onAction={onKeypad} active={sheet === 'closed' && !grid} />
       <MatchBar onHome={() => router.replace('/')} compact={!wide} matchNo={cur.matchNo} ring={wide ? cur.ring : undefined} category={wide ? cur.category : cur.category.replace(' · Cut-off', '')} round={cur.round} judgeNo={s.me?.judgeNo} connection={wide ? 'online' : undefined} />
+      {paused ? <LockBanner text="Paused by the operator. Scoring is locked." /> : null}
       <View style={[styles.who, { backgroundColor: c.chungSoft }]}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View style={{ flexDirection: 'row', gap: space[2], alignItems: 'center' }}>

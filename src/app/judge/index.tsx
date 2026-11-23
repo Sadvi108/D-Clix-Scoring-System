@@ -9,6 +9,7 @@ import { ScoringCutoff } from '@/features/judge/ScoringCutoff';
 import { ScoringFreestyle } from '@/features/judge/ScoringFreestyle';
 import { ScoringPK } from '@/features/judge/ScoringPK';
 import { Standby } from '@/features/judge/Standby';
+import { accountFor } from '@/features/session/session';
 import { palettes } from '@/theme/tokens';
 
 /**
@@ -35,12 +36,15 @@ export default function JudgeHome() {
     return () => { ScreenOrientation.unlockAsync().catch(() => {}); };
   }, [mode, phone]);
 
-  // Prototype: no ID or PIN — every device signs in as the demo seat.
+  // Prototype shortcut (off by default): sign the demo seat in without a PIN.
   useEffect(() => {
     if (AUTO_SIGN_IN && !s.me) api.autoSignIn(AUTO_SIGN_IN_SEAT);
   }, [s.me]);
 
-  if (!s.me) return AUTO_SIGN_IN ? <View style={{ flex: 1, backgroundColor: palettes.arena.ground }} /> : <Redirect href="/judge/sign-in" />;
+  if (AUTO_SIGN_IN && !s.me) return <View style={{ flex: 1, backgroundColor: palettes.arena.ground }} />;
+  // Sign in with a judge PIN, then take a seat on a ring.
+  if (!AUTO_SIGN_IN && !accountFor(s, 'JUDGE')) return <Redirect href={{ pathname: '/sign-in', params: { next: 'judge' } }} />;
+  if (!s.me) return <Redirect href={{ pathname: '/rings', params: { as: 'judge' } }} />;
   const bar = <StatusBar style="light" />;
   if (mode === 'pk') return <>{bar}<ScoringPK /></>;
   if (mode === 'cutoff') return <>{bar}<ScoringCutoff /></>;

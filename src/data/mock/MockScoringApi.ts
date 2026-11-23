@@ -3,13 +3,13 @@
 // status transitions, ranking, qualification and an append-only audit log. Other judges are
 // simulated so the full flow runs on one device.
 
-import type { Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore } from '@/core/types';
+import type { AccountRole, Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore } from '@/core/types';
 import { cutLineTie, cutoffStandings, medalTie, pairBouts, roundScored, boutWinner } from '@/sports/poomsae/ranking';
 import { FREESTYLE_V1, RECOGNIZED_V1, isConfigured, isFreestyle, type RuleSet } from '@/sports/poomsae/rules';
 import { accuracyTenths, activeTaps, aggregate, canDeduct, deductionTenths, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
 import type { DisplayMode, JudgeDraft, Result, RoundPatch, RuleSetPatch, ScoringApi, ScoringSnapshot } from '../ScoringApi';
 import {
-  DEMO_PIN, DEMO_QR_CODE, SEED_AUDIT, SEED_BOUTS, SEED_CATEGORIES, SEED_ENTRIES, SEED_OFFICIALS, SEED_PANEL, SEED_QUEUE, SEED_ROUNDS, SEED_SCORES, SIM_SCORES,
+  DEMO_ACCOUNTS, DEMO_PIN, DEMO_QR_CODE, SEED_AUDIT, SEED_RINGS, SEED_BOUTS, SEED_CATEGORIES, SEED_ENTRIES, SEED_OFFICIALS, SEED_PANEL, SEED_QUEUE, SEED_ROUNDS, SEED_SCORES, SIM_SCORES,
 } from './seed';
 
 const LATENCY = 350;
@@ -57,6 +57,8 @@ function initial(): ScoringSnapshot {
     queue: SEED_QUEUE.map((p) => ({ ...p })),
     current: null,
     judges: judgesFrom(setup.panel, setup.officials),
+    accounts: [],
+    rings: SEED_RINGS.map((r) => ({ id: r.id, name: r.name, operatorIn: r.operatorIn, seats: [1, 2, 3, 4, 5].map((n) => ({ judgeNo: n, takenBy: r.taken[n] ?? null })) })),
     me: null,
     myEvents: [],
     myDraft: emptyDraft(),
@@ -134,12 +136,57 @@ export class MockScoringApi implements ScoringApi {
     this.set({ me: { judgeNo: seat, assignmentId: j.assignmentId, name: j.name } });
     return ok;
   }
-  signOut() {
-    this.set({ me: null, myEvents: [], myDraft: emptyDraft(this.s.rules) });
+  signOut(role?: AccountRole) {
+    const accounts = role ? this.s.accounts.filter((a) => a.role !== role) : [];
+    const keepSeat = role && role !== 'JUDGE';
+    this.set({ accounts, ...(keepSeat ? {} : { me: null, myEvents: [], myDraft: emptyDraft(this.s.rules) }) });
+  }
+
+  async signInPin(pin: string): Promise<Result> {
+    await wait();
+    const a = DEMO_ACCOUNTS[pin];
+    if (!/^\d{6}$/.test(pin)) return fail('Enter all 6 digits');
+    if (!a) return fail('PIN not recognised. Check it with the competition office.');
+    this.set({ accounts: [...this.s.accounts.filter((x) => x.role !== a.role), { ...a }] });
+    this.log(a.name, 'SIGN_IN', 'SETUP', a.role === 'JUDGE' ? 'Judge' : a.role === 'CHIEF' ? 'Chief referee' : 'Ring operator');
+    return ok;
+  }
+
+  async takeSeat(ringId: string, judgeNo: number): Promise<Result> {
+    await wait(200);
+    const acc = this.s.accounts.find((a) => a.role === 'JUDGE');
+    if (!acc) return fail('Sign in as a judge first');
+    const ring = this.s.rings.find((r) => r.id === ringId);
+    const seat = ring?.seats.find((x) => x.judgeNo === judgeNo);
+    if (!ring || !seat) return fail('Seat not found');
+    if (seat.takenBy && seat.takenBy !== acc.name) return fail(`J${judgeNo} is taken by ${seat.takenBy}`);
+    const j = this.s.judges.find((x) => x.judgeNo === judgeNo);
+    // Free the seat this judge held before, then take the new one.
+    const rings = this.s.rings.map((r) => ({ ...r, seats: r.seats.map((x) => (x.takenBy === acc.name ? { ...x, takenBy: null } : r.id === ringId && x.judgeNo === judgeNo ? { ...x, takenBy: acc.name } : x)) }));
+    this.set({
+      rings,
+      ring: { ...this.s.ring, id: ring.id, name: ring.name },
+      me: { judgeNo, assignmentId: j?.assignmentId ?? `A-${ringId}-${judgeNo}`, name: acc.name },
+      myEvents: [], myDraft: emptyDraft(this.s.rules),
+    });
+    this.log(acc.name, 'TAKE_SEAT', 'SETUP', `${ring.name} · J${judgeNo}`);
+    return ok;
+  }
+
+  async chooseRing(ringId: string): Promise<Result> {
+    await wait(200);
+    const ring = this.s.rings.find((r) => r.id === ringId);
+    if (!ring) return fail('Ring not found');
+    const op = this.s.accounts.some((a) => a.role === 'OPERATOR');
+    this.set({
+      ring: { ...this.s.ring, id: ring.id, name: ring.name },
+      rings: op ? this.s.rings.map((r) => (r.id === ringId ? { ...r, operatorIn: true } : r)) : this.s.rings,
+    });
+    return ok;
   }
 
   private judgeCanScore() {
-    return !!this.s.me && this.s.current?.status === 'OPEN' && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
+    return !!this.s.me && this.s.current?.status === 'OPEN' && !this.s.current.paused && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
       && (!this.s.correction || this.s.correction.judgeNo === this.s.me.judgeNo);
   }
 
@@ -189,6 +236,7 @@ export class MockScoringApi implements ScoringApi {
     const cur = this.s.current;
     const me = this.s.me;
     if (!cur || !me || cur.status !== 'OPEN') return fail('Scoring is closed for this performance');
+    if (cur.paused) return fail('Paused by the operator. Scoring is locked.');
     const sides: Side[] = cur.format === 'PK' ? ['chung', 'hong'] : ['chung'];
     const scores: Partial<Record<Side, SideScore>> = {};
     for (const sd of sides) {
@@ -341,6 +389,33 @@ export class MockScoringApi implements ScoringApi {
       this.setCurrent({ clockSec: 0 });
     }
   }
+  async setPaused(paused: boolean) {
+    const cur = this.s.current;
+    if (!cur || cur.status !== 'OPEN' || !!cur.paused === paused) return;
+    await wait(150);
+    if (paused) {
+      this.stopTimer();
+      this.setCurrent({ paused: true, clockRunning: false });
+    } else {
+      this.setCurrent({ paused: false });
+      if (cur.clockSec > 0) await this.setClock('start');
+    }
+    this.log('Ring operator', paused ? 'PAUSE' : 'RESUME', 'SCORING', this.perfLabel(cur));
+  }
+
+  async stopGame(reason: string): Promise<Result> {
+    const cur = this.s.current;
+    if (!cur || cur.status !== 'OPEN') return fail('No game is running');
+    await wait(200);
+    this.stopTimer();
+    this.clearSims();
+    const subs = this.s.submissions.length;
+    this.setCurrent({ status: 'COMPLETE', clockRunning: false, paused: false, stopReason: reason });
+    this.set({ result: subs ? this.compute(cur) : null, correction: null });
+    this.log('Ring operator', 'STOP_GAME', 'SCORING', this.perfLabel(cur), `${reason} · ${subs} of ${this.s.judges.length} judges had sent`);
+    return ok;
+  }
+
   private stopTimer() {
     if (this.clockTimer) clearInterval(this.clockTimer);
     this.clockTimer = null;
@@ -657,10 +732,10 @@ export class MockScoringApi implements ScoringApi {
   resetDemo() {
     this.clearSims();
     this.stopTimer();
-    const me = this.s.me;
+    const { me, accounts, ring, rings } = this.s;
     this.nextMatchNo = 201;
     this.revisions = {};
-    this.s = { ...initial(), me };
+    this.s = { ...initial(), me, accounts, ring, rings };
     this.listeners.forEach((l) => l());
   }
 }

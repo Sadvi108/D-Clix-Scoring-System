@@ -93,6 +93,20 @@ export const SEED_PANEL: RingPanel = {
 
 /** Demo PIN for every seat. Real PINs are issued per assignment by the chief referee. */
 export const DEMO_PIN = '1234';
+
+/** Demo 6-digit PINs, one per role (the PIN decides who signs in). */
+export const DEMO_ACCOUNTS: Record<string, { officialId: string; name: string; role: 'JUDGE' | 'CHIEF' | 'OPERATOR' }> = {
+  '111111': { officialId: 'TO-0877', name: 'Sara Lindqvist', role: 'JUDGE' },
+  '222222': { officialId: 'TO-0450', name: 'Mei Lin Tan', role: 'OPERATOR' },
+  '333333': { officialId: 'TO-0101', name: 'Park Jisoo', role: 'CHIEF' },
+};
+
+/** Rings of the venue. Ring A runs the sample games; B and C share them in this demo. */
+export const SEED_RINGS: { id: string; name: string; operatorIn: boolean; taken: Record<number, string> }[] = [
+  { id: 'R-A', name: 'Ring A', operatorIn: true, taken: { 1: 'Kim Minjun', 2: 'Ahmad Faiz', 4: 'Rafiq Hossain', 5: 'Lucia Ortega' } },
+  { id: 'R-B', name: 'Ring B', operatorIn: false, taken: {} },
+  { id: 'R-C', name: 'Ring C', operatorIn: true, taken: { 1: 'Yuki Nakamura', 2: 'Hassan El-Amin' } },
+];
 export const DEMO_QR_CODE = 'DEMO-SEAT';
 
 /**
