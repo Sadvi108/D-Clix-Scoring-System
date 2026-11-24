@@ -3,7 +3,7 @@
 // the backend team implements the same contract over HTTP + WebSocket (see HttpScoringApi and
 // docs/API_CONTRACT.md). Swapping is a one-line change in src/data/index.ts.
 
-import type { Account, AccountRole, Athlete, JudgeDraftView, SeatEntry, PenaltyCode, WalkoverReason, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
+import type { Account, AccountRole, Athlete, GameRecord, JudgeDraftView, SeatEntry, PenaltyCode, WalkoverReason, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
 import type { DeductionType, PresentationCriterion, RuleSet } from '@/sports/poomsae/rules';
 
 export type DisplayMode = 'CALLUP' | 'LIVE' | 'RESULT';
@@ -52,6 +52,8 @@ export interface ScoringSnapshot {
   setup: { ruleSets: RuleSet[]; categories: Category[]; rounds: CategoryRound[]; officials: Official[]; panel: RingPanel };
   /** Phases 5–7: entries per round, released scores, PK bouts, qualifications. */
   results: { entries: Record<string, Athlete[]>; scores: EntryScore[]; bouts: Bout[]; qualifications: Qualification[]; withdrawn: { roundId: string; entryId: string }[] };
+  /** Finished games of every ring, oldest first (chief referee history). */
+  history: GameRecord[];
   /** P_AuditLog, newest first. */
   audit: AuditEntry[];
 }

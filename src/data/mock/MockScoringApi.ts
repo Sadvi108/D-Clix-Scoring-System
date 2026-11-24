@@ -11,6 +11,7 @@ import type { DisplayMode, JudgeDraft, Result, RoundPatch, RuleSetPatch, Scoring
 import {
   DEMO_ACCOUNTS, DEMO_PIN, DEMO_QR_CODE, SEED_AUDIT, SEED_RINGS, SEED_BOUTS, SEED_CATEGORIES, SEED_ENTRIES, SEED_OFFICIALS, SEED_PANEL, SEED_QUEUE, SEED_ROUNDS, SEED_SCORES, SIM_SCORES,
 } from './seed';
+import { SEED_HISTORY, SEED_HISTORY_AUDIT, SEED_RING_LIVE } from './seedHistory';
 
 const LATENCY = 350;
 const wait = (ms = LATENCY) => new Promise((r) => setTimeout(r, ms));
@@ -58,7 +59,7 @@ function initial(): ScoringSnapshot {
     current: null,
     judges: judgesFrom(setup.panel, setup.officials),
     accounts: [],
-    rings: SEED_RINGS.map((r) => ({ id: r.id, name: r.name, operatorIn: r.operatorIn, seats: [1, 2, 3, 4, 5].map((n) => ({ judgeNo: n, takenBy: r.taken[n] ?? null })) })),
+    rings: SEED_RINGS.map((r) => ({ id: r.id, name: r.name, operatorIn: r.operatorIn, live: SEED_RING_LIVE[r.id], seats: [1, 2, 3, 4, 5].map((n) => ({ judgeNo: n, takenBy: r.taken[n] ?? null })) })),
     me: null,
     myEvents: [],
     myDraft: emptyDraft(),
@@ -69,7 +70,8 @@ function initial(): ScoringSnapshot {
     correction: null,
     setup,
     results,
-    audit: clone(SEED_AUDIT),
+    history: clone(SEED_HISTORY),
+    audit: clone([...SEED_HISTORY_AUDIT, ...SEED_AUDIT]),
   };
 }
 
@@ -113,6 +115,11 @@ export class MockScoringApi implements ScoringApi {
   private rulesFor(p: Performance | null): RuleSet {
     const rs = this.round(p?.roundId)?.ruleSetId ?? 1;
     return this.s.setup.ruleSets.find((x) => x.id === rs) ?? this.s.setup.ruleSets[0];
+  }
+  /** Keep a finished game for the chief referee's history. */
+  private archive(p: Performance, result: RoundResult | null, submissions: JudgeSubmission[]) {
+    const rec = { ringId: this.s.ring.id, performance: clone(p), submissions: clone(submissions), result: result ? clone(result) : null, freestyle: isFreestyle(this.rulesFor(p)), finishedAt: now() };
+    this.set({ history: [...this.s.history.filter((h) => h.performance.id !== p.id), rec] });
   }
   private perfLabel(p: Performance) {
     return `Match ${p.matchNo}${p.format === 'CUTOFF' ? ` · Form ${p.formNo}` : ''}`;
@@ -534,6 +541,7 @@ export class MockScoringApi implements ScoringApi {
     this.setCurrent({ status: 'RELEASED' });
     this.set({ result: { ...r, released: true, releasedAt }, display: 'RESULT' });
     this.recordResult(cur, r, releasedAt);
+    this.archive(this.s.current!, this.s.result, this.s.submissions);
     this.scheduleAutoNext(cur.id);
     const fig = cur.format === 'PK' ? `${r.sides.chung?.final.toFixed(4)} – ${r.sides.hong?.final.toFixed(4)}` : r.sides.chung?.final.toFixed(4);
     this.log('Chief referee', 'RELEASE', 'RESULTS', this.perfLabel(cur), fig);
@@ -850,6 +858,7 @@ export class MockScoringApi implements ScoringApi {
     await wait(200);
     if (isCur) { this.stopTimer(); this.clearSims(); }
     const done: Performance = { ...p, status: 'WITHDRAWN', clockRunning: false, paused: false, walkover: { absent, reason } };
+    this.archive(done, null, []);
     let queue = this.s.queue.map((x) => (x.id === performanceId ? done : x));
     let results = this.s.results;
     if (p.format === 'PK' && p.hong) {
@@ -913,6 +922,7 @@ export class MockScoringApi implements ScoringApi {
     this.setCurrent({ status: 'RELEASED', clockRunning: false, paused: false });
     this.set({ result: next, display: 'RESULT', drafts: [] });
     this.recordResult(cur, next, releasedAt);
+    this.archive(this.s.current!, next, this.s.submissions);
     const sent = this.s.submissions.length;
     const note = sent === 0 ? ' (no scores)' : !allSent ? ` (${sent} of ${this.s.judges.length} judges had sent)`
       : suggested === 'TIE' ? ' (tie decided)' : suggested && suggested !== winner ? ' (against the suggested winner)' : '';

@@ -1,5 +1,5 @@
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
@@ -29,6 +29,7 @@ function Results() {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [tab, setTab] = useState<'standings' | 'audit'>('standings');
+  const { round } = useLocalSearchParams<{ round?: string }>();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right', 'bottom']}>
@@ -37,7 +38,7 @@ function Results() {
         <View style={{ alignSelf: wide ? 'flex-start' : 'stretch' }}>
           <Segmented value={tab} onChange={setTab} options={[{ value: 'standings', label: 'Standings & qualification' }, { value: 'audit', label: 'Audit log' }]} />
         </View>
-        {tab === 'standings' ? <Standings wide={wide} /> : <AuditLog wide={wide} />}
+        {tab === 'standings' ? <Standings wide={wide} startRoundId={round} /> : <AuditLog wide={wide} />}
       </ScrollView>
     </SafeAreaView>
   );

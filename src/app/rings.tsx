@@ -28,6 +28,8 @@ export default function Rings() {
   const role: AccountRole | null = roleFromParam(as) ?? s.accounts.at(-1)?.role ?? null;
   const acc = role ? s.accounts.find((a) => a.role === role) : null;
   if (!role || !acc) return <Redirect href={{ pathname: '/sign-in', params: role ? { next: ROLE_PARAM[role] } : {} }} />;
+  // The chief referee watches every ring: All rings has the live state and "Open this ring".
+  if (role === 'CHIEF') return <Redirect href="/chief" />;
 
   async function seat(ring: RingInfo, judgeNo: number) {
     setBusy(`${ring.id}-${judgeNo}`); setErr(null);

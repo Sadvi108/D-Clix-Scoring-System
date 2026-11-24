@@ -157,6 +157,11 @@ function Referee() {
       <MatchBar onHome={() => router.replace('/')} matchNo={cur?.matchNo} ring={s.ring.name} category={cur?.category ?? 'Chief referee'} round={cur?.round} roleLabel="Chief referee" connection="online" compact={!wide} />
       <ScrollView contentContainerStyle={[styles.body, { flexDirection: wide ? 'row' : 'column' }]}>
         <View style={{ flex: 1, gap: space[3], minWidth: 0 }}>
+          <View style={{ flexDirection: 'row', gap: space[2], flexWrap: 'wrap' }}>
+            <Button label="All rings" icon="menu" variant="secondary" onPress={() => router.push('/chief')} />
+            <Button label="History" icon="list" variant="secondary" onPress={() => router.push({ pathname: '/chief/history', params: { ring: s.ring.id } })} />
+            <Button label="Rounds" icon="award" variant="secondary" onPress={() => router.push('/chief/rounds')} />
+          </View>
           <View style={styles.ph}>
             <Txt v="overline" color="inkMuted">Submissions <Txt v="scoreMd">{s.submissions.length} / {s.judges.length}</Txt></Txt>
             {complete ? <StatusPill status="sent" label="Panel complete" /> : <StatusPill status="waiting" label={cur?.status === 'OPEN' ? 'Scoring open' : 'Waiting'} />}

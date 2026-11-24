@@ -12,12 +12,13 @@ import { Button, Icon, Panel, RuleBadge, Txt } from '@/ui/primitives';
 
 const f4 = (n: number | null | undefined) => (n == null ? '–.––––' : n.toFixed(4));
 
-export function Standings({ wide }: { wide: boolean }) {
+export function Standings({ wide, startRoundId }: { wide: boolean; startRoundId?: string }) {
   const s = useScoring();
-  const [cat, setCat] = useState(s.setup.categories[0].id);
+  const start = s.setup.rounds.find((r) => r.id === startRoundId);
+  const [cat, setCat] = useState(start?.categoryId ?? s.setup.categories[0].id);
   const rounds = s.setup.rounds.filter((r) => r.categoryId === cat).sort((a, b) => a.order - b.order);
   const firstActive = rounds.find((r) => r.status !== 'CONFIRMED') ?? rounds[rounds.length - 1];
-  const [roundSel, setRoundSel] = useState<Record<string, string>>({});
+  const [roundSel, setRoundSel] = useState<Record<string, string>>(start ? { [start.categoryId]: start.id } : {});
   const roundId = roundSel[cat] ?? firstActive?.id;
   const round = rounds.find((r) => r.id === roundId) ?? firstActive;
   const category = s.setup.categories.find((c) => c.id === cat)!;

@@ -263,6 +263,23 @@ export interface RingInfo {
   operatorIn: boolean;
   /** Judge seats of the ring panel and who sits in each (null = free). */
   seats: { judgeNo: number; takenBy: string | null }[];
+  /** Server summary for rings this device has not opened (the open ring is derived from the live queue). */
+  live?: RingLive;
+}
+
+export type RingState = 'SCORING' | 'WITH_RIC' | 'PAUSED' | 'IDLE';
+/** Chief · All rings: one ring at a glance. */
+export interface RingLive { state: RingState; note: string; done: number; left: number }
+
+/** A finished game kept for the chief referee's history (released, declared or walkover). */
+export interface GameRecord {
+  ringId: string;
+  performance: Performance;
+  /** Every judge's submission (empty for a walkover or a winner declared without scores). */
+  submissions: JudgeSubmission[];
+  result: RoundResult | null;
+  freestyle: boolean;
+  finishedAt: string;
 }
 
 // ---------------- Game actions ----------------
