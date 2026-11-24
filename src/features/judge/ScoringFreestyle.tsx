@@ -13,12 +13,13 @@ import { RuleBadge, Txt, f1 } from '@/ui/primitives';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { DeductionPad, LockBanner, ScoreChip, ScoreSummary, SendButton } from '@/ui/scoring';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
+import { ConfirmSend } from './ConfirmSend';
 import { receiptTime, useJudge } from './useJudge';
 
 /**
  * Freestyle (Cut-off, one entry, blue), laid out like the judge tablet manual: −0.3 key on the left, −0.1 key on the
  * right (the round counter on a key removes one), Technical skills (6.0) and Presentation (4.0) items in the centre.
- * Tapping an item opens the number grid: Technical page, OK, Presentation page, OK. Send sends at once.
+ * Tapping an item opens the number grid: Technical page, OK, Presentation page, OK. Send asks to confirm.
  */
 export function ScoringFreestyle() {
   useKeepAwake();
@@ -27,7 +28,8 @@ export function ScoringFreestyle() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width >= 700;
-  const { s, cur, chung, locked, notice, sendState, correction } = useJudge();
+  const j = useJudge();
+  const { s, cur, chung, locked, notice, sendState, correction, confirming, pressSend } = j;
   const [grid, setGrid] = useState<number | null>(null); // page to open: 0 Technical, 1 Presentation
   if (!cur) return null;
 
@@ -43,11 +45,7 @@ export function ScoringFreestyle() {
   const minor = rules.deductions.find((d) => d.code === 'ACC_01');
   const padH = wide ? 180 : 120;
 
-  async function send() {
-    if (sendState !== 'ready' && sendState !== 'failed') return;
-    const r = await api.submit();
-    if (!r.ok) return;
-  }
+  const send = pressSend;
 
   // USB keypad: 7/9 = −0.3, 4/6 = −0.1 (either column), 1/3 = undo last, Enter = send.
   const onKeypad = (a: KeypadAction) => {
@@ -94,7 +92,7 @@ export function ScoringFreestyle() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
-      <KeypadCapture onAction={onKeypad} active={grid == null} />
+      <KeypadCapture onAction={onKeypad} active={grid == null && !confirming} />
       <MatchBar onHome={() => router.replace('/')} compact={!wide} matchNo={cur.matchNo} ring={wide ? cur.ring : undefined} category={cur.category} round={cur.round} judgeNo={s.me?.judgeNo} connection={wide ? 'online' : undefined} />
       {notice ? <LockBanner icon={notice.icon} text={notice.text} /> : null}
       <View style={[styles.who, { backgroundColor: c.chungSoft }]}>
@@ -152,6 +150,7 @@ export function ScoringFreestyle() {
           onOk={(v) => { Object.entries(v).forEach(([i, t]) => api.setCriterion('chung', Number(i), t)); setGrid(null); }}
           onClose={() => setGrid(null)} />
       ) : null}
+      <ConfirmSend j={j} />
     </SafeAreaView>
   );
 }

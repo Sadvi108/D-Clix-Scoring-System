@@ -13,17 +13,19 @@ import { DeductionPad, LockBanner, ScoreChip, SendButton } from '@/ui/scoring';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
 import { usePkSides, toggleSides } from './sideLayout';
+import { ConfirmSend } from './ConfirmSend';
 import { receiptTime, useJudge } from './useJudge';
 
 /**
  * Chung vs Hong on one landscape screen: deduction keys on each side (the round counter on a key removes one of that
- * deduction), presentation in the centre (tap a value to open the number grid), Send bottom-centre (one press).
+ * deduction), presentation in the centre (tap a value to open the number grid), Send bottom-centre (asks to confirm).
  */
 export function ScoringPK() {
   useKeepAwake();
   const router = useRouter();
   const { c } = useTheme();
-  const { s, cur, chung, hong, locked, notice, sendState, pressSend, correction } = useJudge();
+  const j = useJudge();
+  const { s, cur, chung, hong, locked, notice, sendState, pressSend, correction, confirming } = j;
   const { width, height } = useWindowDimensions();
   const compact = height < 560; // phone in landscape
   const [bodyH, setBodyH] = useState(0);
@@ -67,7 +69,7 @@ export function ScoringPK() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right', 'bottom']}>
-      <KeypadCapture onAction={onKeypad} active={!grid} />
+      <KeypadCapture onAction={onKeypad} active={!grid && !confirming} />
       <MatchBar onHome={() => router.replace('/')} compact={compact} matchNo={cur.matchNo} ring={cur.ring} category={compact ? `${cur.category.replace('Male Under', 'Male U')} · ${cur.round.replace('Round of ', 'R')}` : cur.category} round={cur.round} judgeNo={s.me?.judgeNo} connection={s.connection === 'sending' ? 'sending' : 'online'} />
       {notice ? <LockBanner icon={notice.icon} text={notice.text} /> : null}
       <View style={[styles.plates, { paddingHorizontal: space[4], paddingTop: compact ? 6 : 12, gap }]}>
@@ -123,6 +125,7 @@ export function ScoringPK() {
           onOk={(v) => { Object.entries(v).forEach(([i, t]) => api.setCriterion(grid, Number(i), t)); setGrid(null); }}
           onClose={() => setGrid(null)} />
       ) : null}
+      <ConfirmSend j={j} />
     </SafeAreaView>
   );
 }

@@ -32,7 +32,7 @@ export function Standby() {
             {s.current?.stopReason ? 'Game stopped by the operator' : s.current?.status === 'CALLED' || s.current?.status === 'ON_MAT' ? 'Athletes are on their way' : 'Waiting for the ring operator'}
           </Txt>
           <Txt v="body" color="inkMuted" style={{ textAlign: wide ? 'left' : 'center' }}>
-            {s.current?.stopReason ? `Reason: ${s.current.stopReason}. Scoring is closed for this game; the chief referee decides the result. ` : ''}
+            {s.current?.stopReason ? `Reason: ${s.current.stopReason}. Scoring is closed for this game. ` : ''}
             Scoring opens here the moment the operator starts the performance. Keep the screen on; you do not need to tap anything.
             {isRotatePrompt ? ' This is a PK bout: scoring opens in landscape, so turn your phone sideways.' : ''}
           </Txt>

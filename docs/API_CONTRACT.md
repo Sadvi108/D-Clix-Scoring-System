@@ -86,7 +86,8 @@ QUEUED → CALLED → ON_MAT → OPEN → COMPLETE → WITH_RIC → RELEASED
 | `chooseRing(ringId)` | POST | `/poomsae/rings/{ringId}/open` | → 204 | Operator or chief opens a ring |
 | `setPaused(paused)` | POST | `/poomsae/attempt/pause` | `{ paused }` | Locks every judge and stops the clock |
 | `stopGame(reason)` | POST | `/poomsae/attempt/stop` | `{ reason }` | Ends the game early; judges who sent keep their score |
-| `enterSeatScores(judgeNo)` | POST | `/poomsae/score/proxy` | `{ judgeNo }` | Operator enters the maximum for an offline seat; submission marked `enteredBy: OPERATOR` |
+| `enterSeatScores(judgeNo, sides)` | POST | `/poomsae/score/proxy` | `{ judgeNo, sides: { chung?, hong?: { accuracyTenths, criteria[], deductionTenths? } } }` | Operator types in a judge's scores (offline or cannot send), any time before release / declare; submission marked `enteredBy: OPERATOR` |
+| (snapshot) `drafts` | WS | `/poomsae/judges/drafts` | — | Officials see each judge's score while it is entered (`JudgeDraftView`), before SEND |
 | `freeSeat(judgeNo)` | DELETE | `/poomsae/rings/{ringId}/seats/{judgeNo}` | → 204 | Signs the tablet out of the seat |
 | `walkover(performanceId, absent, reason)` | POST | `/poomsae/attempt/walkover` | `{ absent: 'chung'\|'hong', reason: 'Did not appear'\|'Withdrawn'\|'Disqualified' }` | PK: the other athlete wins. Cut-off: the entry leaves the round |
 | `addPenalty(side, code, by)` | POST | `/poomsae/attempt/penalty` | `{ side, code: 'OVER_TIME'\|'OUT_OF_BOUNDS' }` | Over time −0.3 chief only; out of bounds −0.1. Taken off that athlete's final (DRAFT) |

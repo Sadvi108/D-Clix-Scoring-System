@@ -93,9 +93,19 @@ export interface JudgeSubmission {
   idempotencyKey: string;
   receivedAt: string; // server time
   sides: Partial<Record<Side, SideScore>>;
-  /** Entered by the ring operator for an offline judge seat. */
+  /** Entered by the ring operator for a judge who is offline or cannot send. */
   enteredBy?: 'OPERATOR';
 }
+
+/** A judge's score while still being entered (before SEND). Officials see it live. */
+export interface JudgeDraftView {
+  judgeNo: number;
+  sides: Partial<Record<Side, { accuracy: number; presentation: number | null; deduction?: number; total: number | null }>>;
+  updatedAt: string;
+}
+
+/** Scores the ring operator types in for one judge seat (tenths). Freestyle: accuracyTenths is ignored. */
+export interface SeatEntry { accuracyTenths: number; criteria: number[]; deductionTenths?: number }
 
 export interface SideResult {
   final: number; // 4 decimals

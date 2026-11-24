@@ -3,7 +3,7 @@
 // the backend team implements the same contract over HTTP + WebSocket (see HttpScoringApi and
 // docs/API_CONTRACT.md). Swapping is a one-line change in src/data/index.ts.
 
-import type { Account, AccountRole, Athlete, PenaltyCode, WalkoverReason, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
+import type { Account, AccountRole, Athlete, JudgeDraftView, SeatEntry, PenaltyCode, WalkoverReason, AuditEntry, Bout, Category, CategoryRound, EntryScore, JudgeAssignment, JudgeSendState, JudgeSubmission, Official, Performance, Qualification, RingInfo, RingPanel, RoundResult, ScoreEvent, Side } from '@/core/types';
 import type { DeductionType, PresentationCriterion, RuleSet } from '@/sports/poomsae/rules';
 
 export type DisplayMode = 'CALLUP' | 'LIVE' | 'RESULT';
@@ -41,6 +41,8 @@ export interface ScoringSnapshot {
   myDraft: JudgeDraft;
   /** Officials only: every judge's submission for the current performance. */
   submissions: JudgeSubmission[];
+  /** Officials only: every judge's score as it is being entered, before they send. */
+  drafts: JudgeDraftView[];
   result: RoundResult | null;
   display: DisplayMode;
   /** Open correction on the current performance (chief referee reopened one judge). */
@@ -89,8 +91,9 @@ export interface ScoringApi {
   setClock(action: 'start' | 'stop' | 'reset'): Promise<void>;
   /** Pause locks every judge and stops the clock; resume unlocks them. */
   setPaused(paused: boolean): Promise<void>;
-  /** End the game early (injury, etc.). Judges who sent keep their score; the rest are locked out. */
+  /** End the game early (injury, etc.). The clock stops; judges can still send, and the operator can declare the winner directly. */
   stopGame(reason: string): Promise<Result>;
+  /** Close scoring and hand the game to the chief referee (after every judge sent, or after a stop with whoever sent). */
   handToReferee(): Promise<void>;
   withdraw(performanceId: string): Promise<void>;
   callNext(): Promise<void>;
@@ -119,8 +122,8 @@ export interface ScoringApi {
   scheduleRound(roundId: string): Promise<Result>;
 
   // Game actions (operator / chief referee)
-  /** Operator enters the maximum score for a judge seat whose tablet is offline. */
-  enterSeatScores(judgeNo: number): Promise<Result>;
+  /** Operator enters the scores for a judge who is offline or cannot send, any time before release or declare. */
+  enterSeatScores(judgeNo: number, sides: Partial<Record<Side, SeatEntry>>): Promise<Result>;
   /** Release a judge seat so another tablet can take it. */
   freeSeat(judgeNo: number): Promise<Result>;
   /** Walkover: one athlete does not take part. PK: the other athlete wins. Cut-off: the entry leaves the round. */
@@ -128,9 +131,12 @@ export interface ScoringApi {
   /** Penalty on the current game. Over time is chief referee only. */
   addPenalty(side: Side, code: PenaltyCode, by: 'OPERATOR' | 'CHIEF'): Promise<Result>;
   removePenalty(penaltyId: string): Promise<Result>;
-  /** PK: declare the winner and release. The operator can declare unless it is a tie; then only the chief can. */
+  /**
+   * PK: declare the winner and release, with or without scores (any time after scoring opens). The operator can
+   * declare unless every judge sent and it is a tie; then only the chief can. The next game is called automatically.
+   */
   declareWinner(winner: Side, by: 'OPERATOR' | 'CHIEF'): Promise<Result>;
-  /** Cut-off tie: the chief orders the tied entries to perform again (added next in the queue). */
+  /** Cut-off tie: the tied entries perform the round's forms again (added next in the queue); the new scores replace the old. */
   orderRematch(roundId: string, entryIds: string[]): Promise<Result>;
 
   // Prototype only

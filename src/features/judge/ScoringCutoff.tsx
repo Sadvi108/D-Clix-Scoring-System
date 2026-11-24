@@ -12,9 +12,10 @@ import { Txt, f1 } from '@/ui/primitives';
 import { DeductionPad, LockBanner, ScoreChip, ScoreSummary, SendButton } from '@/ui/scoring';
 import { ScoreGrid } from '@/ui/scoreGrid';
 import { KeypadCapture, type KeypadAction } from '@/device/keypad';
+import { ConfirmSend } from './ConfirmSend';
 import { receiptTime, useJudge } from './useJudge';
 
-/** One athlete (Cut-off, any entry type). Tap a presentation value for the number grid; Send sends at once, then shows the receipt. */
+/** One athlete (Cut-off, any entry type). Tap a presentation value for the number grid; Send asks to confirm, then shows the receipt. */
 export function ScoringCutoff() {
   useKeepAwake();
   const router = useRouter();
@@ -23,7 +24,8 @@ export function ScoringCutoff() {
   const { width } = useWindowDimensions();
   const wide = width >= 700;
   const twoCol = width >= 900; // tablet landscape: keys on the left, presentation on the right
-  const { s, cur, chung, locked, notice, sendState, correction } = useJudge();
+  const j = useJudge();
+  const { s, cur, chung, locked, notice, sendState, correction, confirming, pressSend } = j;
   const [grid, setGrid] = useState(false);
   if (!cur) return null;
 
@@ -33,15 +35,11 @@ export function ScoringCutoff() {
   const receipt = s.myDraft.receipt;
   const sending = s.myDraft.sendState === 'sending';
 
-  async function send() {
-    if (sendState !== 'ready' && sendState !== 'failed') return;
-    const r = await api.submit();
-    if (!r.ok) return;
-  }
+  const send = pressSend;
 
   // USB keypad: either column scores the one athlete; Enter sends.
   const onKeypad = (a: KeypadAction) => {
-    if (a.kind === 'send') { if (sendState === 'ready' || sendState === 'failed') send(); return; }
+    if (a.kind === 'send') { send(); return; }
     if (a.kind === 'cancel' || locked) return;
     if (a.kind === 'undo') { if (chung.canUndo) api.undo('chung'); return; }
     const d = a.kind === 'major' ? major : minor;
@@ -50,7 +48,7 @@ export function ScoringCutoff() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
-      <KeypadCapture onAction={onKeypad} active={!grid} />
+      <KeypadCapture onAction={onKeypad} active={!grid && !confirming} />
       <MatchBar onHome={() => router.replace('/')} compact={!wide} matchNo={cur.matchNo} ring={wide ? cur.ring : undefined} category={wide ? cur.category : cur.category.replace(' · Cut-off', '')} round={cur.round} judgeNo={s.me?.judgeNo} connection={wide ? 'online' : undefined} />
       {notice ? <LockBanner icon={notice.icon} text={notice.text} /> : null}
       <View style={[styles.who, { backgroundColor: c.chungSoft }]}>
@@ -117,6 +115,7 @@ export function ScoringCutoff() {
           onOk={(v) => { Object.entries(v).forEach(([i, t]) => api.setCriterion('chung', Number(i), t)); setGrid(false); }}
           onClose={() => setGrid(false)} />
       ) : null}
+      <ConfirmSend j={j} />
     </SafeAreaView>
   );
 }

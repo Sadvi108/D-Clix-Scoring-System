@@ -10,19 +10,21 @@ import { radius, space } from '@/theme/tokens';
 import { Button, Icon, Txt } from './primitives';
 
 export type GridRow = { key: string; label: string; sub?: string; min: number; max: number; value: number | null };
-export type GridPage = { title: string; rows: GridRow[] };
+export type GridPage = { title: string; rows: GridRow[]; side?: 'chung' | 'hong' | 'solo' };
 
-/** Values from max down to min (tenths). Over 1.0 they split in two lines like the paper sheet: 2.0–1.1, then 1.0–0.0. */
+/** Values from max down to min (tenths), one line per point like the paper sheet: …, 2.0–1.1, then 1.0–0.0. */
 function lines(min: number, max: number): number[][] {
-  const all: number[] = [];
-  for (let v = max; v >= min; v--) all.push(v);
-  if (max <= 10) return [all];
-  return [all.filter((v) => v > 10), all.filter((v) => v <= 10)];
+  const out = new Map<number, number[]>();
+  for (let v = max; v >= min; v--) {
+    const k = v <= 10 ? 1 : Math.ceil(v / 10);
+    out.set(k, [...(out.get(k) ?? []), v]);
+  }
+  return [...out.values()];
 }
 
 /** Mount only while open: it starts from the values passed in and gives them back on OK. Close discards. */
-export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, onOk, onClose }: {
-  title: string; side?: 'chung' | 'hong' | 'solo'; pages: GridPage[]; startPage?: number;
+export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, note, onOk, onClose }: {
+  title: string; side?: 'chung' | 'hong' | 'solo'; pages: GridPage[]; startPage?: number; note?: string | null;
   onOk: (values: Record<string, number>) => void; onClose: () => void;
 }) {
   const { c } = useTheme();
@@ -31,8 +33,9 @@ export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, onOk, o
   const [page, setPage] = useState(Math.min(startPage, pages.length - 1));
   const [values, setValues] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(pages.flatMap((p) => p.rows.map((r) => [r.key, r.value]))));
-  const fill = side === 'hong' ? c.hong : c.chung;
   const cur = pages[page];
+  const pageSide = cur.side ?? side;
+  const fill = pageSide === 'hong' ? c.hong : c.chung;
   const last = page === pages.length - 1;
 
   const ok = () => {
@@ -56,7 +59,7 @@ export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, onOk, o
             <NavBtn dir="prev" hidden={pages.length < 2} disabled={page === 0} onPress={() => setPage(page - 1)} />
             <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
               <Txt v="title" numberOfLines={1} style={{ fontSize: compact ? 17 : 22 }}>{title}</Txt>
-              <Txt v="overline" color={side === 'hong' ? 'hongText' : 'chungText'}>{cur.title}{pages.length > 1 ? ` · ${page + 1}/${pages.length}` : ''}</Txt>
+              <Txt v="overline" color={pageSide === 'hong' ? 'hongText' : 'chungText'}>{cur.title}{pages.length > 1 ? ` · ${page + 1}/${pages.length}` : ''}</Txt>
             </View>
             <NavBtn dir="next" hidden={pages.length < 2} disabled={last} onPress={() => setPage(page + 1)} />
           </View>
@@ -68,7 +71,7 @@ export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, onOk, o
               return (
                 <View key={r.key} style={[styles.row, { borderBottomColor: c.hairline }]}>
                   <View style={{ width: labelW }}>
-                    <Txt v="label" color={side === 'hong' ? 'hongText' : 'chungText'} style={{ fontSize: compact ? 13 : 16 }}>{r.label}</Txt>
+                    <Txt v="label" color={pageSide === 'hong' ? 'hongText' : 'chungText'} style={{ fontSize: compact ? 13 : 16 }}>{r.label}</Txt>
                     {r.sub && !compact ? <Txt v="caption" color="inkMuted">{r.sub}</Txt> : null}
                   </View>
                   <View style={{ flex: 1, gap: 4 }}>
@@ -93,6 +96,7 @@ export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, onOk, o
             })}
           </ScrollView>
 
+          {note ? <Txt v="caption" color="alertText" style={{ textAlign: 'center' }}>{note}</Txt> : null}
           <View style={styles.foot}>
             <Button label={last ? 'OK' : 'OK · next'} icon="check" onPress={ok} style={{ minWidth: compact ? 130 : 180 }} />
             <Button label="Close" variant="secondary" onPress={onClose} style={{ minWidth: compact ? 110 : 150 }} />

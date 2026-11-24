@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, useScoring } from '@/data';
 import { judgeStates, lifecycleSteps } from '@/features/officials/helpers';
 import { canOperate } from '@/features/session/session';
-import { PenaltySheet, ProvisionalResult, SeatSheet, WalkoverSheet } from '@/features/officials/GameActions';
+import { DeclareSheet, LiveJudgeScores, PenaltySheet, ProvisionalResult, SeatEntryGrid, SeatSheet, WalkoverSheet } from '@/features/officials/GameActions';
 import type { Performance, Side } from '@/core/types';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
@@ -39,6 +39,8 @@ function Operator() {
   const [seat, setSeat] = useState<number | null>(null);
   const [walk, setWalk] = useState(false);
   const [more, setMore] = useState(false);
+  const [entry, setEntry] = useState<number | null>(null);
+  const [declaring, setDeclaring] = useState<Side | null>(null);
   // The chief referee can run the operator screen too; actions are recorded under the signed-in role.
   const by: 'OPERATOR' | 'CHIEF' = s.accounts.some((a) => a.role === 'OPERATOR') ? 'OPERATOR' : 'CHIEF';
   const declare = async (w: Side) => {
@@ -57,6 +59,9 @@ function Operator() {
   })();
   const sent = s.submissions.length;
   const matFree = !cur || st === 'RELEASED';
+  // PK: once the form has started the operator can declare a winner directly, with or without scores.
+  const canDeclareNow = st === 'OPEN' && cur?.format === 'PK' && !!cur.hong && (cur.clockSec > 0 || !!cur.stopReason);
+  const declareBtn = (sd: Side) => (canDeclareNow ? <Button label={`Declare ${cur![sd]!.name.split(' ').slice(-1)[0]} winner`} icon="flag" variant="secondary" onPress={() => setDeclaring(sd)} style={{ alignSelf: sd === 'hong' ? 'flex-end' : 'flex-start' }} /> : null);
 
   const primary: { label: string; icon: IconName; disabled?: boolean; run?: () => void } = (() => {
     if (!cur || st === 'RELEASED') {
@@ -67,7 +72,13 @@ function Operator() {
     switch (st) {
       case 'CALLED': return { label: 'Confirm athletes on mat', icon: 'check', run: () => api.confirmOnMat() };
       case 'ON_MAT': return { label: `Open scoring · Form ${cur.formNo}`, icon: 'send', run: () => api.openScoring() };
-      case 'OPEN': return { label: cur.paused ? 'Paused · resume to continue' : cur.clockRunning ? 'Clock running' : cur.clockSec === 0 ? 'Start the clock to begin' : `Waiting for judges · ${sent}/${s.judges.length}`, icon: cur.paused ? 'pause' : 'clock', disabled: true };
+      case 'OPEN':
+        if (cur.stopReason) {
+          return cur.format === 'PK' && cur.hong
+            ? { label: `Stopped · declare the winner · ${sent}/${s.judges.length} sent`, icon: 'flag', disabled: true }
+            : { label: `Close scoring · hand to chief referee (${sent}/${s.judges.length} sent)`, icon: 'send', run: () => api.handToReferee() };
+        }
+        return { label: cur.paused ? 'Paused · resume to continue' : cur.clockRunning ? 'Clock running' : cur.clockSec === 0 ? 'Start the clock to begin' : `Waiting for judges · ${sent}/${s.judges.length}`, icon: cur.paused ? 'pause' : 'clock', disabled: true };
       case 'COMPLETE':
         if (cur.format === 'PK' && cur.hong && s.result) {
           const w = s.result.winner;
@@ -134,18 +145,20 @@ function Operator() {
     <View style={{ flex: 1, gap: space[3], minWidth: 0 }}>
       <Panel><StepTrack steps={lifecycleSteps(st)} showLabels={wide} /></Panel>
       {cur?.paused ? <Notice tone="info" text="Game paused. The clock is stopped and every judge tablet is locked until you resume." /> : null}
-      {cur?.stopReason ? <Notice text={`Game stopped: ${cur.stopReason}. ${sent} of ${s.judges.length} judges had sent; the others are locked out. Hand it to the chief referee to decide the result.`} /> : null}
+      {cur?.stopReason && st === 'OPEN' ? <Notice text={`Game stopped: ${cur.stopReason}. Judges can still send (${sent} of ${s.judges.length} so far). ${cur.format === 'PK' ? 'Declare the winner directly, with or without scores.' : 'Close scoring to hand the game to the chief referee.'}`} /> : null}
+      {st === 'RELEASED' && nextQueued ? <Notice tone="info" text={`Result released. Match ${nextQueued.matchNo} is called automatically in a moment.`} /> : null}
       <Panel>
         {cur ? (
           <View style={[styles.bout, { flexDirection: wide ? 'row' : 'column' }]}>
             <View style={{ flex: 1, minWidth: 0, width: wide ? undefined : '100%' }}>
               <AthletePlate side={cur.format === 'PK' ? 'chung' : 'solo'} athlete={cur.chung} tag={cur.format === 'PK' ? undefined : cur.chung.entryId} showScores={false} />
+              {canDeclareNow ? <View style={{ marginTop: space[2] }}>{declareBtn('chung')}</View> : null}
             </View>
             <View style={{ alignItems: 'center', gap: 6, minWidth: 180 }}>
               <Txt v="scoreHero" color={cur.clockRunning ? 'goldText' : 'ink'} style={{ fontSize: 52, lineHeight: 52 }} accessibilityRole="timer">{mmss(cur.clockSec)}</Txt>
               <Txt v="overline">{cur.form} · F{cur.formNo}</Txt>
               {cur.paused ? <Txt v="overline" color="goldText">Paused · judges locked</Txt> : cur.stopReason ? <Txt v="overline" color="alertText">Stopped · {cur.stopReason}</Txt> : null}
-              {st === 'OPEN' ? <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {st === 'OPEN' && !cur.stopReason ? <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {cur.paused ? (
                   <Button label="Resume" icon="play" disabled={st !== 'OPEN'} onPress={() => api.setPaused(false)} />
                 ) : cur.clockRunning ? (
@@ -164,6 +177,7 @@ function Operator() {
             {cur.format === 'PK' && cur.hong ? (
               <View style={{ flex: 1, minWidth: 0, width: wide ? undefined : '100%' }}>
                 <AthletePlate side="hong" athlete={cur.hong} showScores={false} />
+                {canDeclareNow ? <View style={{ marginTop: space[2] }}>{declareBtn('hong')}</View> : null}
               </View>
             ) : <View style={{ flex: 1 }} />}
           </View>
@@ -181,7 +195,7 @@ function Operator() {
             <Txt v="overline" color="inkMuted">Referees · sent {sent}/{s.judges.length} · tap a tile for options</Txt>
             <JudgeStatusGrid chipWidth={wide ? 84 : 64} onPress={(n) => setSeat(n)}
               judges={judgeStates(s).map((j) => {
-                const sub = s.result ? s.submissions.find((x) => x.judgeNo === j.no) : undefined;
+                const sub = s.submissions.find((x) => x.judgeNo === j.no);
                 return { ...j, detail: sub ? Object.values(sub.sides).map((x) => x!.total.toFixed(1)).join(' · ') : undefined };
               })} />
           </View>
@@ -195,13 +209,12 @@ function Operator() {
           </View>
         </View>
       </Panel>
-      {s.result && cur ? <Panel><ProvisionalResult s={s} /></Panel> : null}
+      {s.result && cur ? <Panel><ProvisionalResult s={s} /></Panel> : cur && st === 'OPEN' ? <Panel><LiveJudgeScores s={s} /></Panel> : null}
       <View style={[styles.act, { flexDirection: wide ? 'row' : 'column-reverse' }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], flexWrap: 'wrap', flexShrink: 1, minWidth: 0 }}>
           <Button label="Walkover" icon="alert" variant="danger" disabled={!cur || !['CALLED', 'ON_MAT', 'OPEN'].includes(st ?? '')} onPress={() => setWalk(true)} />
           <Button label="Stop game" icon="stop" variant="danger" disabled={st !== 'OPEN'} onPress={() => setStopping(true)} />
           <Button label="More actions" icon="menu" variant="secondary" disabled={!cur || !['OPEN', 'COMPLETE', 'WITH_RIC'].includes(st ?? '')} onPress={() => setMore(true)} />
-          {!s.result ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name="lock" size={14} color={c.inkMuted} /><Txt v="caption" color="inkMuted">Scores show here only after every referee has sent</Txt></View> : null}
         </View>
         <View style={{ gap: space[2], alignItems: wide ? 'flex-end' : 'stretch' }}>
           {msg ? <Txt v="caption" color="alertText" style={{ maxWidth: 420 }}>{msg}</Txt> : null}
@@ -225,7 +238,9 @@ function Operator() {
         {main}
         {!wide ? queue : null}
       </ScrollView>
-      {seat != null ? <SeatSheet judgeNo={seat} onClose={() => setSeat(null)} /> : null}
+      {seat != null ? <SeatSheet judgeNo={seat} onClose={() => setSeat(null)} onEnter={() => { setEntry(seat); setSeat(null); }} /> : null}
+      {entry != null ? <SeatEntryGrid judgeNo={entry} onClose={() => setEntry(null)} /> : null}
+      {declaring && cur ? <DeclareSheet winner={declaring} by={by} onClose={() => setDeclaring(null)} /> : null}
       {walk && cur ? <WalkoverSheet perf={cur} onClose={() => setWalk(false)} /> : null}
       {more && cur ? <PenaltySheet by={by} onClose={() => setMore(false)} /> : null}
       {stopping && cur ? <StopGameSheet sent={sent} total={s.judges.length} onClose={() => setStopping(false)} onStop={async (reason) => {
@@ -239,7 +254,7 @@ function Operator() {
 
 const REASONS = ['Injury', 'Equipment or venue problem', 'Athlete unwell', 'Other'];
 
-/** Stop game: end the performance early. Judges who sent keep their score; the rest are locked out. */
+/** Stop game: stop the clock early. Judges can still send; the operator declares the winner (PK) or closes scoring. */
 function StopGameSheet({ sent, total, onStop, onClose }: { sent: number; total: number; onStop: (reason: string) => void; onClose: () => void }) {
   const { c } = useTheme();
   const [reason, setReason] = useState(REASONS[0]);
@@ -250,7 +265,7 @@ function StopGameSheet({ sent, total, onStop, onClose }: { sent: number; total: 
       <View style={styles.sheetWrap} pointerEvents="box-none">
         <View style={[styles.sheet, { backgroundColor: c.surface, borderColor: c.hairline }]}>
           <Txt v="title">Stop this game?</Txt>
-          <Txt v="body" color="inkMuted">The clock stops and scoring closes now. {sent > 0 ? `${sent} of ${total} judges have sent; their scores are kept and the others are locked out.` : 'No judge has sent yet, so there will be no score to release.'} The chief referee decides what happens next.</Txt>
+          <Txt v="body" color="inkMuted">The clock stops now. {sent > 0 ? `${sent} of ${total} judges have sent.` : 'No judge has sent yet.'} Judges can still send their scores. After that you can declare the winner directly (PK), with or without scores, or close scoring and hand the game to the chief referee.</Txt>
           <Txt v="overline" color="inkMuted">Reason</Txt>
           <View style={{ gap: 8 }}>
             {REASONS.map((r) => {

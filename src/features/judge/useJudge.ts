@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Side } from '@/core/types';
 import { api, useScoring } from '@/data';
 import { isFreestyle } from '@/sports/poomsae/rules';
@@ -7,6 +8,7 @@ import type { SendState } from '@/ui/scoring';
 /** Everything a judge scoring screen needs, derived from the live snapshot. */
 export function useJudge() {
   const s = useScoring();
+  const [confirming, setConfirming] = useState(false);
   const judgeNo = s.me?.judgeNo ?? 0;
   const cur = s.current;
   const sides: Side[] = cur?.format === 'PK' ? ['chung', 'hong'] : ['chung'];
@@ -39,11 +41,12 @@ export function useJudge() {
   const hong = side('hong');
   const complete = sides.every((sd) => (sd === 'chung' ? chung : hong).total != null);
   const paused = !!cur?.paused;
+  const stopped = !!cur?.stopReason;
   // Called / on the mat, or scoring open but the operator has not started the form yet.
-  const waiting = !!cur && (cur.status === 'CALLED' || cur.status === 'ON_MAT' || (cur.status === 'OPEN' && !paused && !cur.clockRunning && cur.clockSec === 0));
+  const waiting = !!cur && (cur.status === 'CALLED' || cur.status === 'ON_MAT' || (cur.status === 'OPEN' && !paused && !stopped && !cur.clockRunning && cur.clockSec === 0));
   const locked = s.myDraft.sendState === 'sent' || s.myDraft.sendState === 'sending' || cur?.status !== 'OPEN' || paused || waiting;
 
-  // One press sends, as on the judge tablet manual ("Check the score and send").
+  // Send asks for confirmation first; once sent the score is locked (only the chief referee can reopen it).
   const sendState: SendState =
     s.myDraft.sendState === 'sent' ? 'sent'
       : s.myDraft.sendState === 'sending' ? 'sending'
@@ -52,20 +55,27 @@ export function useJudge() {
           : s.myDraft.sendState === 'failed' ? 'failed'
             : !complete ? 'incomplete' : 'ready';
 
-  async function pressSend() {
+  /** Send button / Enter key: opens the confirmation. */
+  function pressSend() {
+    if (sendState === 'ready' || sendState === 'failed') setConfirming(true);
+  }
+  async function confirmSend() {
+    setConfirming(false);
     if (sendState === 'ready' || sendState === 'failed') return api.submit();
     return null;
   }
+  const cancelSend = () => setConfirming(false);
 
   const correction = s.correction && s.correction.judgeNo === judgeNo ? s.correction : null;
     // One line under the match bar telling the judge why the screen is locked.
   const notice: { icon: 'clock' | 'pause' | 'check'; text: string } | null =
     paused ? { icon: 'pause', text: 'Paused by the operator. Scoring is locked.' }
+      : stopped && cur?.status === 'OPEN' && s.myDraft.sendState !== 'sent' ? { icon: 'clock', text: `Game stopped: ${cur.stopReason}. You can still finish and send your score.` }
       : waiting ? { icon: 'clock', text: 'Waiting for the operator to start…' }
         : s.myDraft.sendState === 'sent' && cur?.status !== 'RELEASED' ? { icon: 'check', text: 'Sent. Waiting for the other referees and the operator.' }
           : null;
 
-  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, paused, waiting, notice, sendState, pressSend };
+  return { s, cur, judgeNo, sides, correction, chung, hong, complete, locked, paused, waiting, notice, sendState, pressSend, confirming, confirmSend, cancelSend };
 }
 
 export function receiptTime(iso: string | undefined) {

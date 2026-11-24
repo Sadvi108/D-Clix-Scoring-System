@@ -162,7 +162,7 @@ function Referee() {
             {complete ? <StatusPill status="sent" label="Panel complete" /> : <StatusPill status="waiting" label={cur?.status === 'OPEN' ? 'Scoring open' : 'Waiting'} />}
           </View>
           <JudgeStatusGrid judges={judgeStates(s)} chipWidth={wide ? 80 : 60} />
-          {cur?.stopReason ? <Notice text={`Stopped by the operator: ${cur.stopReason}. ${s.submissions.length} of ${s.judges.length} judges sent before the stop.${s.submissions.length ? '' : ' No scores to release.'}`} /> : null}
+          {cur?.stopReason ? <Notice text={`Stopped by the operator: ${cur.stopReason}. ${s.submissions.length} of ${s.judges.length} judges have sent.${s.submissions.length ? '' : ' No scores to release.'}`} /> : null}
           {s.correction ? <Notice tone="info" text={`Correction open · Judge ${s.correction.judgeNo} is re-scoring (${s.correction.reason}). The result is recalculated when the new revision arrives.`} /> : null}
           {s.rules.trimMode !== 'APPROVED' ? (
             <View style={[styles.banner, { backgroundColor: c.alertSoft, borderColor: c.alert }]}>

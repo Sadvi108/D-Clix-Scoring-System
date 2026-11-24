@@ -3,10 +3,10 @@
 // status transitions, ranking, qualification and an append-only audit log. Other judges are
 // simulated so the full flow runs on one device.
 
-import type { AccountRole, Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeSubmission, Penalty, PenaltyCode, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, Side, SideScore, WalkoverReason } from '@/core/types';
+import type { AccountRole, Athlete, AuditEntry, CategoryRound, JudgeAssignment, JudgeDraftView, JudgeSubmission, Penalty, PenaltyCode, Performance, Qualification, RingPanel, RoundResult, ScoreEvent, SeatEntry, Side, SideScore, WalkoverReason } from '@/core/types';
 import { cutLineTie, cutoffStandings, medalTie, pairBouts, roundScored, boutWinner } from '@/sports/poomsae/ranking';
 import { FREESTYLE_V1, PENALTY_TYPES, RECOGNIZED_V1, isConfigured, isFreestyle, type RuleSet } from '@/sports/poomsae/rules';
-import { accuracyTenths, activeTaps, aggregate, canDeduct, deductionTenths, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
+import { accuracyTenths, activeTaps, aggregate, canDeduct, deductionTenths, partialTenths, presentationTenths, round4, technicalTenths } from '@/sports/poomsae/scoring';
 import type { DisplayMode, JudgeDraft, Result, RoundPatch, RuleSetPatch, ScoringApi, ScoringSnapshot } from '../ScoringApi';
 import {
   DEMO_ACCOUNTS, DEMO_PIN, DEMO_QR_CODE, SEED_AUDIT, SEED_RINGS, SEED_BOUTS, SEED_CATEGORIES, SEED_ENTRIES, SEED_OFFICIALS, SEED_PANEL, SEED_QUEUE, SEED_ROUNDS, SEED_SCORES, SIM_SCORES,
@@ -24,8 +24,8 @@ const ON_MAT: Performance['status'][] = ['CALLED', 'ON_MAT', 'OPEN', 'COMPLETE',
 
 function emptyDraft(rules: RuleSet = RECOGNIZED_V1): JudgeDraft {
   const n = rules.criteria.length;
-  // Every item starts at 0.0, as on the judge tablet.
-  return { criteria: { chung: Array(n).fill(0), hong: Array(n).fill(0) }, sendState: 'idle', receipt: null };
+  // Items show 0.0 but count as unset until the judge picks a value: every item must be picked before SEND.
+  return { criteria: { chung: Array(n).fill(null), hong: Array(n).fill(null) }, sendState: 'idle', receipt: null };
 }
 
 function judgesFrom(panel: RingPanel, officials: ScoringSnapshot['setup']['officials']): JudgeAssignment[] {
@@ -63,6 +63,7 @@ function initial(): ScoringSnapshot {
     myEvents: [],
     myDraft: emptyDraft(),
     submissions: [],
+    drafts: [],
     result: null,
     display: 'CALLUP',
     correction: null,
@@ -79,6 +80,7 @@ export class MockScoringApi implements ScoringApi {
   private simTimers: ReturnType<typeof setTimeout>[] = [];
   private revisions: Record<number, number> = {};
   private nextMatchNo = 201;
+  private autoNextTimer: ReturnType<typeof setTimeout> | null = null;
 
   subscribe = (l: () => void) => {
     this.listeners.add(l);
@@ -186,7 +188,7 @@ export class MockScoringApi implements ScoringApi {
   }
 
   private judgeCanScore() {
-    return !!this.s.me && this.s.current?.status === 'OPEN' && !this.s.current.paused && (this.s.current.clockRunning || this.s.current.clockSec > 0) && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
+    return !!this.s.me && this.s.current?.status === 'OPEN' && !this.s.current.paused && (this.s.current.clockRunning || this.s.current.clockSec > 0 || !!this.s.current.stopReason) && this.s.myDraft.sendState !== 'sent' && this.s.myDraft.sendState !== 'sending'
       && (!this.s.correction || this.s.correction.judgeNo === this.s.me.judgeNo);
   }
 
@@ -197,6 +199,7 @@ export class MockScoringApi implements ScoringApi {
     if (!canDeduct(this.s.rules, acc, deductionCode)) return;
     const ev: ScoreEvent = { eventId: id('EV'), clientRequestId: id('REQ'), performanceId: this.s.current!.id, judgeNo: me.judgeNo, side, type: 'TAP', deductionCode, at: now() };
     this.set({ myEvents: [...this.s.myEvents, ev] }); // optimistic local append; server is idempotent on clientRequestId
+    this.pushMyDraft();
   }
 
   async undo(side: Side, deductionCode?: string) {
@@ -207,12 +210,60 @@ export class MockScoringApi implements ScoringApi {
     if (!last) return;
     const ev: ScoreEvent = { eventId: id('EV'), clientRequestId: id('REQ'), performanceId: last.performanceId, judgeNo: me.judgeNo, side, type: 'UNDO', reversesEventId: last.eventId, at: now() };
     this.set({ myEvents: [...this.s.myEvents, ev] });
+    this.pushMyDraft();
   }
 
   setCriterion(side: Side, index: number, tenths: number | null) {
     if (!this.judgeCanScore()) return;
     const crit = { ...this.s.myDraft.criteria, [side]: this.s.myDraft.criteria[side].map((v, i) => (i === index ? tenths : v)) };
     this.set({ myDraft: { ...this.s.myDraft, criteria: crit } });
+    this.pushMyDraft();
+  }
+
+  // ---------------- Live drafts (officials see judges' scores before SEND) ----------------
+  private setDraft(judgeNo: number, sides: JudgeDraftView['sides']) {
+    const d: JudgeDraftView = { judgeNo, sides, updatedAt: now() };
+    this.set({ drafts: [...this.s.drafts.filter((x) => x.judgeNo !== judgeNo), d].sort((a, b) => a.judgeNo - b.judgeNo) });
+  }
+  /** This device's judge: what they have entered so far. */
+  private pushMyDraft() {
+    const me = this.s.me;
+    const cur = this.s.current;
+    if (!me || !cur) return;
+    const rules = this.s.rules;
+    const sides: JudgeDraftView['sides'] = {};
+    for (const sd of (cur.format === 'PK' ? ['chung', 'hong'] : ['chung']) as Side[]) {
+      const crit = this.s.myDraft.criteria[sd];
+      const taps = activeTaps(this.s.myEvents, me.judgeNo, sd);
+      const accT = isFreestyle(rules) ? (technicalTenths(rules, crit) ?? partialTenths(rules, crit, 'TECHNICAL')) : accuracyTenths(rules, taps);
+      const presT = presentationTenths(rules, crit);
+      const dedT = isFreestyle(rules) ? deductionTenths(rules, taps) : 0;
+      sides[sd] = {
+        accuracy: accT / 10,
+        presentation: presT == null ? partialTenths(rules, crit, 'PRESENTATION') / 10 : presT / 10,
+        deduction: isFreestyle(rules) ? dedT / 10 : undefined,
+        total: presT == null || (isFreestyle(rules) && technicalTenths(rules, crit) == null) ? null : Math.max(0, accT + presT - dedT) / 10,
+      };
+    }
+    this.setDraft(me.judgeNo, sides);
+  }
+  /** Simulated judges: accuracy drops while the form runs; presentation is filled in when the form ends. */
+  private simDrafts(final: boolean) {
+    const cur = this.s.current;
+    if (!cur || cur.status !== 'OPEN') return;
+    const frac = final ? 1 : Math.min(1, cur.clockSec / 45);
+    for (const j of this.s.judges) {
+      if (!j.online || j.judgeNo === this.s.me?.judgeNo || this.s.submissions.some((x) => x.judgeNo === j.judgeNo)) continue;
+      const target = this.simScore(cur, j.judgeNo, (this.revisions[j.judgeNo] ?? 0) + 1);
+      const sides: JudgeDraftView['sides'] = {};
+      for (const [sd, sc] of Object.entries(target) as [Side, SideScore][]) {
+        const fs = isFreestyle(this.s.rules);
+        const accMax = fs ? 0 : this.s.rules.accuracyMaxTenths / 10;
+        const acc = fs ? (final ? sc.accuracy : 0) : round4(accMax - (accMax - sc.accuracy) * frac);
+        sides[sd] = { accuracy: Math.round(acc * 10) / 10, presentation: final ? sc.presentation : null, total: final ? sc.total : null };
+      }
+      this.setDraft(j.judgeNo, sides);
+    }
   }
 
   private sideScore(judgeNo: number, side: Side, events: ScoreEvent[], criteria: (number | null)[]): SideScore | null {
@@ -252,6 +303,7 @@ export class MockScoringApi implements ScoringApi {
     this.set({
       connection: 'online',
       submissions: [...this.s.submissions.filter((x) => x.judgeNo !== me.judgeNo), sub],
+      drafts: this.s.drafts.filter((x) => x.judgeNo !== me.judgeNo),
       myDraft: { ...this.s.myDraft, sendState: 'sent', receipt: { submissionId: sub.submissionId, receivedAt: sub.receivedAt, revision, idempotencyKey } },
     });
     this.log(`Judge ${me.judgeNo}`, 'SEND', 'SCORING', this.perfLabel(cur), `rev ${revision} · ${sides.map((sd) => scores[sd]!.total.toFixed(1)).join(' / ')}`);
@@ -290,7 +342,7 @@ export class MockScoringApi implements ScoringApi {
       const revision = this.nextRevision(judgeNo);
       const sides = this.simScore(cur, judgeNo, revision);
       const sub: JudgeSubmission = { submissionId: id('SUB'), performanceId: cur.id, judgeNo, revision, idempotencyKey: id('IDEM'), receivedAt: now(), sides };
-      this.set({ submissions: [...this.s.submissions, sub] });
+      this.set({ submissions: [...this.s.submissions, sub], drafts: this.s.drafts.filter((x) => x.judgeNo !== judgeNo) });
       this.log(`Judge ${judgeNo}`, 'SEND', 'SCORING', this.perfLabel(cur), `rev ${revision} · ${Object.values(sides).map((x) => x!.total.toFixed(1)).join(' / ')}`);
       this.checkComplete();
     }, delay);
@@ -301,7 +353,8 @@ export class MockScoringApi implements ScoringApi {
     const cur = this.s.current;
     if (!cur || cur.status !== 'OPEN') return;
     const pending = this.s.judges.filter((j) => j.online && j.judgeNo !== this.s.me?.judgeNo && !this.s.submissions.some((s) => s.judgeNo === j.judgeNo));
-    pending.forEach((j, i) => this.simSend(cur, j.judgeNo, 700 + i * 650));
+    this.simDrafts(true);
+    pending.forEach((j, i) => this.simSend(cur, j.judgeNo, 1500 + i * 900));
   }
 
   private checkComplete() {
@@ -311,7 +364,7 @@ export class MockScoringApi implements ScoringApi {
     const wasCorrection = this.s.correction;
     this.setCurrent({ status: wasCorrection ? 'WITH_RIC' : 'COMPLETE', clockRunning: false });
     this.stopTimer();
-    this.set({ result: this.compute(cur), correction: null });
+    this.set({ result: this.compute(cur), correction: null, drafts: [] });
     this.log('System', 'COMPLETE', 'SCORING', this.perfLabel(cur), wasCorrection ? `Recalculated after correction (J${wasCorrection.judgeNo})` : `${this.s.submissions.length} of ${this.s.judges.length} judges sent`);
   }
 
@@ -349,9 +402,10 @@ export class MockScoringApi implements ScoringApi {
     const missing = panel.seats.slice(0, panel.judgeCount).find((s) => !s.officialId || !s.pairedAt);
     if (missing) return fail(`Seat J${missing.judgeNo} has no ${missing.officialId ? 'paired device' : 'judge assigned'}. Fix it in Admin › Panel.`);
     this.clearSims();
+    this.cancelAutoNext();
     this.revisions = {};
     const next: Performance = { ...p, status: 'CALLED', clockSec: 0, clockRunning: false };
-    this.set({ current: next, rules, queue: this.s.queue.map((x) => (x.id === p.id ? next : x)), submissions: [], result: null, correction: null, myEvents: [], myDraft: emptyDraft(rules), display: 'CALLUP' });
+    this.set({ current: next, rules, queue: this.s.queue.map((x) => (x.id === p.id ? next : x)), submissions: [], drafts: [], result: null, correction: null, myEvents: [], myDraft: emptyDraft(rules), display: 'CALLUP' });
     this.log('Ring operator', 'CALL', 'SCORING', this.perfLabel(next), p.hong ? `${p.chung.name} vs ${p.hong.name}` : p.chung.name);
     return ok;
   }
@@ -375,12 +429,12 @@ export class MockScoringApi implements ScoringApi {
   }
   async setClock(action: 'start' | 'stop' | 'reset') {
     const cur = this.s.current;
-    if (!cur || cur.status !== 'OPEN') return;
+    if (!cur || cur.status !== 'OPEN' || cur.stopReason) return;
     if (action === 'start' && !cur.clockRunning) {
       this.setCurrent({ clockRunning: true });
       this.clockTimer = setInterval(() => {
         const c = this.s.current;
-        if (c?.clockRunning) this.setCurrent({ clockSec: c.clockSec + 1 });
+        if (c?.clockRunning) { this.setCurrent({ clockSec: c.clockSec + 1 }); if ((c.clockSec + 1) % 3 === 0) this.simDrafts(false); }
       }, 1000);
     } else if (action === 'stop') {
       this.stopTimer();
@@ -408,13 +462,14 @@ export class MockScoringApi implements ScoringApi {
   async stopGame(reason: string): Promise<Result> {
     const cur = this.s.current;
     if (!cur || cur.status !== 'OPEN') return fail('No game is running');
+    if (cur.stopReason) return fail('This game is already stopped');
     await wait(200);
     this.stopTimer();
-    this.clearSims();
-    const subs = this.s.submissions.length;
-    this.setCurrent({ status: 'COMPLETE', clockRunning: false, paused: false, stopReason: reason });
-    this.set({ result: subs ? this.compute(cur) : null, correction: null });
-    this.log('Ring operator', 'STOP_GAME', 'SCORING', this.perfLabel(cur), `${reason} · ${subs} of ${this.s.judges.length} judges had sent`);
+    // Scoring stays open: judges can still send, the operator can declare the winner directly (PK)
+    // or close scoring and hand the game to the chief referee.
+    this.setCurrent({ clockRunning: false, paused: false, stopReason: reason });
+    this.log('Ring operator', 'STOP_GAME', 'SCORING', this.perfLabel(cur), `${reason} · ${this.s.submissions.length} of ${this.s.judges.length} judges had sent`);
+    if (!this.s.correction) this.simulateOtherJudges();
     return ok;
   }
 
@@ -424,6 +479,15 @@ export class MockScoringApi implements ScoringApi {
   }
   async handToReferee() {
     await wait(150);
+    const c = this.s.current;
+    if (c?.status === 'OPEN' && c.stopReason) {
+      // Close scoring with whoever has sent.
+      this.clearSims();
+      this.setCurrent({ status: 'WITH_RIC', clockRunning: false });
+      this.set({ result: this.s.submissions.length ? this.compute(c) : null, drafts: [] });
+      this.log('Ring operator', 'HAND_TO_RIC', 'SCORING', this.perfLabel(c), `Scoring closed after stop · ${this.s.submissions.length} of ${this.s.judges.length} sent`);
+      return;
+    }
     if (this.s.current?.status === 'COMPLETE') {
       this.setCurrent({ status: 'WITH_RIC' });
       this.log('Ring operator', 'HAND_TO_RIC', 'SCORING', this.perfLabel(this.s.current));
@@ -470,6 +534,7 @@ export class MockScoringApi implements ScoringApi {
     this.setCurrent({ status: 'RELEASED' });
     this.set({ result: { ...r, released: true, releasedAt }, display: 'RESULT' });
     this.recordResult(cur, r, releasedAt);
+    this.scheduleAutoNext(cur.id);
     const fig = cur.format === 'PK' ? `${r.sides.chung?.final.toFixed(4)} – ${r.sides.hong?.final.toFixed(4)}` : r.sides.chung?.final.toFixed(4);
     this.log('Chief referee', 'RELEASE', 'RESULTS', this.perfLabel(cur), fig);
     return ok;
@@ -729,23 +794,35 @@ export class MockScoringApi implements ScoringApi {
   // ---------------- Game actions (operator / chief referee) ----------------
   private actor(by: 'OPERATOR' | 'CHIEF') { return by === 'CHIEF' ? 'Chief referee' : 'Ring operator'; }
 
-  async enterSeatScores(judgeNo: number): Promise<Result> {
+  async enterSeatScores(judgeNo: number, entry: Partial<Record<Side, SeatEntry>>): Promise<Result> {
     const cur = this.s.current;
-    if (!cur || cur.status !== 'OPEN') return fail('Scoring is not open');
+    if (!cur || !['OPEN', 'COMPLETE', 'WITH_RIC'].includes(cur.status)) return fail('Scores can be entered only while the game is on the mat, before release');
     if (this.s.submissions.some((x) => x.judgeNo === judgeNo)) return fail(`J${judgeNo} has already sent`);
     if (!this.s.judges.some((j) => j.judgeNo === judgeNo)) return fail(`No seat J${judgeNo} on this panel`);
-    await wait(200);
     const rules = this.s.rules;
-    const crit = rules.criteria.map((c) => c.maxTenths);
-    const pres = presentationTenths(rules, crit)!;
-    const acc = isFreestyle(rules) ? technicalTenths(rules, crit)! : rules.accuracyMaxTenths;
-    const one: SideScore = { accuracy: acc / 10, criteria: crit.map((v) => v / 10), presentation: pres / 10, total: (acc + pres) / 10 };
-    const sides: Partial<Record<Side, SideScore>> = cur.format === 'PK' ? { chung: one, hong: { ...one } } : { chung: one };
+    const fs = isFreestyle(rules);
+    const sides: Partial<Record<Side, SideScore>> = {};
+    for (const sd of (cur.format === 'PK' ? ['chung', 'hong'] : ['chung']) as Side[]) {
+      const e = entry[sd];
+      if (!e || e.criteria.length !== rules.criteria.length) return fail('Pick a value for every item');
+      if (e.criteria.some((v, i) => v == null || v < rules.criteria[i].minTenths || v > rules.criteria[i].maxTenths)) return fail('A value is out of range');
+      const pres = presentationTenths(rules, e.criteria)!;
+      if (fs) {
+        const tech = technicalTenths(rules, e.criteria)!;
+        const ded = Math.max(0, e.deductionTenths ?? 0);
+        sides[sd] = { accuracy: tech / 10, criteria: e.criteria.map((v) => v / 10), presentation: pres / 10, deduction: ded / 10, total: Math.max(0, tech + pres - ded) / 10 };
+      } else {
+        if (e.accuracyTenths < 0 || e.accuracyTenths > rules.accuracyMaxTenths) return fail('Accuracy is out of range');
+        sides[sd] = { accuracy: e.accuracyTenths / 10, criteria: e.criteria.map((v) => v / 10), presentation: pres / 10, total: (e.accuracyTenths + pres) / 10 };
+      }
+    }
+    await wait(200);
     const revision = this.nextRevision(judgeNo);
     const sub: JudgeSubmission = { submissionId: id('SUB'), performanceId: cur.id, judgeNo, revision, idempotencyKey: id('IDEM'), receivedAt: now(), sides, enteredBy: 'OPERATOR' };
-    this.set({ submissions: [...this.s.submissions, sub] });
-    this.log('Ring operator', 'PROXY_SCORE', 'SCORING', this.perfLabel(cur), `J${judgeNo} offline · maximum entered (${one.total.toFixed(1)})`);
-    this.checkComplete();
+    this.set({ submissions: [...this.s.submissions, sub], drafts: this.s.drafts.filter((x) => x.judgeNo !== judgeNo) });
+    this.log('Ring operator', 'PROXY_SCORE', 'SCORING', this.perfLabel(cur), `J${judgeNo} entered by the operator · ${Object.values(sides).map((x) => x!.total.toFixed(1)).join(' / ')}`);
+    if (cur.status === 'OPEN') this.checkComplete();
+    else this.set({ result: this.compute(cur) });
     return ok;
   }
 
@@ -821,18 +898,40 @@ export class MockScoringApi implements ScoringApi {
 
   async declareWinner(winner: Side, by: 'OPERATOR' | 'CHIEF'): Promise<Result> {
     const cur = this.s.current;
-    const r = this.s.result;
-    if (!cur || cur.format !== 'PK' || !r || !['COMPLETE', 'WITH_RIC'].includes(cur.status)) return fail('Every referee must send first');
-    if (r.winner === 'TIE' && by !== 'CHIEF') return fail('Tie: only the chief referee can decide');
+    if (!cur || cur.format !== 'PK' || !cur.hong) return fail('No PK game on the mat');
+    if (!['OPEN', 'COMPLETE', 'WITH_RIC'].includes(cur.status)) return fail('Open scoring first');
+    const allSent = cur.status !== 'OPEN';
+    // With every score in and a tie, only the chief referee decides. Before that, the operator may declare directly.
+    if (allSent && this.s.result?.winner === 'TIE' && by !== 'CHIEF') return fail('Tie: only the chief referee can decide');
     await wait(400);
+    this.stopTimer();
+    this.clearSims();
+    const base: RoundResult = this.s.result ?? this.compute(cur);
+    const suggested = base.winner;
     const releasedAt = now();
-    const next: RoundResult = { ...r, winner, declaredBy: by, released: true, releasedAt };
-    this.setCurrent({ status: 'RELEASED' });
-    this.set({ result: next, display: 'RESULT' });
+    const next: RoundResult = { ...base, winner, declaredBy: by, released: true, releasedAt };
+    this.setCurrent({ status: 'RELEASED', clockRunning: false, paused: false });
+    this.set({ result: next, display: 'RESULT', drafts: [] });
     this.recordResult(cur, next, releasedAt);
-    const against = r.winner !== 'TIE' && r.winner !== winner ? ' (against the suggested winner)' : r.winner === 'TIE' ? ' (tie decided)' : '';
-    this.log(this.actor(by), 'PK_DECLARE', 'RESULTS', this.perfLabel(cur), `${cur[winner]!.name} wins${against}`);
+    const sent = this.s.submissions.length;
+    const note = sent === 0 ? ' (no scores)' : !allSent ? ` (${sent} of ${this.s.judges.length} judges had sent)`
+      : suggested === 'TIE' ? ' (tie decided)' : suggested && suggested !== winner ? ' (against the suggested winner)' : '';
+    this.log(this.actor(by), 'PK_DECLARE', 'RESULTS', this.perfLabel(cur), `${cur[winner]!.name} wins${note}`);
+    this.scheduleAutoNext(cur.id);
     return ok;
+  }
+
+  /** After a winner is declared or a result released, the next game comes up on its own. */
+  private scheduleAutoNext(performanceId: string) {
+    this.cancelAutoNext();
+    this.autoNextTimer = setTimeout(() => {
+      this.autoNextTimer = null;
+      if (this.s.current?.id === performanceId && this.s.current.status === 'RELEASED') this.callNext();
+    }, 3000);
+  }
+  private cancelAutoNext() {
+    if (this.autoNextTimer) clearTimeout(this.autoNextTimer);
+    this.autoNextTimer = null;
   }
 
   async orderRematch(roundId: string, entryIds: string[]): Promise<Result> {
@@ -844,17 +943,18 @@ export class MockScoringApi implements ScoringApi {
     const tpl = this.s.queue.find((x) => x.roundId === roundId);
     const entries = this.s.results.entries[roundId] ?? [];
     if (!tpl) return fail('No game template for this round');
-    const form = r.forms[0]?.name ?? tpl.form;
-    const perfs: Performance[] = entryIds.map((e) => ({
+    // Same forms as the round; each new score replaces the old one for that form (see recordResult).
+    const forms = r.forms.length ? r.forms.map((f) => f.name) : [tpl.form];
+    const perfs: Performance[] = entryIds.flatMap((e) => forms.map((form, i) => ({
       ...tpl, id: id('P'), matchNo: `RM-${this.nextMatchNo++}`, chung: entries.find((x) => x.entryId === e) ?? tpl.chung,
-      formNo: 1, form, status: 'QUEUED', clockSec: 0, clockRunning: false, paused: false, stopReason: null, penalties: [], walkover: null, rematch: true,
-    }));
+      formNo: i + 1, form, status: 'QUEUED' as const, clockSec: 0, clockRunning: false, paused: false, stopReason: null, penalties: [], walkover: null, rematch: true,
+    })));
     const at = this.s.current ? this.s.queue.findIndex((x) => x.id === this.s.current!.id) + 1 : 0;
     const queue = [...this.s.queue.slice(0, at), ...perfs, ...this.s.queue.slice(at)];
     this.set({ queue });
     if (r.status === 'SCORED') this.setRound(r.id, { status: 'LIVE' });
     const names = entryIds.map((e) => entries.find((x) => x.entryId === e)?.name ?? e);
-    this.log('Chief referee', 'REMATCH', 'RESULTS', this.roundLabel(r), `${names.join(', ')} perform ${form} again`);
+    this.log('Chief referee', 'REMATCH', 'RESULTS', this.roundLabel(r), `${names.join(', ')} perform ${forms.join(' + ')} again · new scores replace the old`);
     return ok;
   }
 
@@ -865,6 +965,7 @@ export class MockScoringApi implements ScoringApi {
   }
   resetDemo() {
     this.clearSims();
+    this.cancelAutoNext();
     this.stopTimer();
     const { me, accounts, ring, rings } = this.s;
     this.nextMatchNo = 201;

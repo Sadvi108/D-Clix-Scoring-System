@@ -97,9 +97,10 @@ export function ScoreChip({ side, value, disabled, onPress, compact, label }: {
   const { c } = useTheme();
   const fill = side === 'hong' ? c.hong : c.chung;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label} ${f1(value == null ? null : value / 10)}. Tap to score`} disabled={disabled} onPress={onPress}
-      style={({ pressed }) => [styles.chip, { height: compact ? 44 : 52, backgroundColor: fill, opacity: disabled ? 0.55 : pressed ? 0.8 : 1, transform: [{ translateY: pressed ? 2 : 0 }] }]}>
-      <Txt v="scoreLg" color="#ffffff" style={{ fontSize: compact ? 24 : 28, lineHeight: compact ? 28 : 32 }}>{f1(value == null ? null : value / 10)}</Txt>
+    // Not picked yet: outlined 0.0. Picked: filled with the value.
+    <Pressable accessibilityRole="button" accessibilityLabel={`${label} ${value == null ? 'not scored yet' : f1(value / 10)}. Tap to score`} disabled={disabled} onPress={onPress}
+      style={({ pressed }) => [styles.chip, { height: compact ? 44 : 52, backgroundColor: value == null ? 'transparent' : fill, borderWidth: 2, borderColor: fill, borderStyle: value == null ? 'dashed' : 'solid', opacity: disabled ? 0.55 : pressed ? 0.8 : 1, transform: [{ translateY: pressed ? 2 : 0 }] }]}>
+      <Txt v="scoreLg" color={value == null ? (side === 'hong' ? 'hongText' : 'chungText') : '#ffffff'} style={{ fontSize: compact ? 24 : 28, lineHeight: compact ? 28 : 32, opacity: value == null ? 0.6 : 1 }}>{f1((value ?? 0) / 10)}</Txt>
     </Pressable>
   );
 }
