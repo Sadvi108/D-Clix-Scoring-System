@@ -51,6 +51,7 @@ const PATHS: Record<string, string[]> = {
   pause: ['M9 5v14', 'M15 5v14'],
   play: ['M7 5l12 7-12 7z'],
   stop: ['M6 6h12v12H6z'],
+  globe: ['M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18', 'M3 12h18', 'M12 3c3.2 3.6 3.2 14.4 0 18', 'M12 3c-3.2 3.6-3.2 14.4 0 18'],
 };
 export type IconName = keyof typeof PATHS;
 export function Icon({ name, size = 20, color, stroke = 2 }: { name: IconName; size?: number; color?: string; stroke?: number }) {
