@@ -166,7 +166,7 @@ export default function SignIn() {
 
       {/* Corners: role menu (demo) on the left, language on the right. */}
       <SafeAreaView style={styles.corners} pointerEvents="box-none">
-        <Pressable onPress={() => router.replace('/')} accessibilityRole="button" accessibilityLabel="Back to role menu" hitSlop={6}
+        <Pressable onPress={() => router.push('/menu')} accessibilityRole="button" accessibilityLabel="Role menu" hitSlop={6}
           style={({ pressed }) => [styles.square, { backgroundColor: pressed ? N.keyPressed : N.key, borderColor: N.border }]}>
           <Icon name="menu" size={22} color={N.ink} />
         </Pressable>
