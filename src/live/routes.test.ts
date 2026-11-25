@@ -11,7 +11,7 @@ test('no ring goes to the ring picker', () => {
 
 test('a judge needs a seat as well as a ring', () => {
   assert.equal(homeFor(p({ ring: 'A' })), '/rings');
-  assert.equal(homeFor(p({ ring: 'A', seat: 2 })), '/ring-status');
+  assert.equal(homeFor(p({ ring: 'A', seat: 2 })), '/judge');
 });
 
 test('operator and chief with a ring go to work', () => {

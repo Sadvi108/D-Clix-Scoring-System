@@ -1,80 +1,51 @@
-import { AUTO_SIGN_IN } from '@/config';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api, useScoring } from '@/data';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
-import { AthletePlate, MatchBar } from '@/ui/match';
-import { usePkSides } from './sideLayout';
-import { Button, Icon, StatusPill, Txt } from '@/ui/primitives';
+import { MatchBar } from '@/ui/match';
+import { Icon, StatusPill, Txt } from '@/ui/primitives';
+import type { JudgeModel } from './model';
 
-export function Standby() {
+/** Nothing to score yet (or a game scored another way): who we are waiting for and which games come next. */
+export function Standby({ j }: { j: JudgeModel }) {
   const router = useRouter();
   const { c } = useTheme();
-  const s = useScoring();
   const { width } = useWindowDimensions();
   const wide = width >= 700;
-  const next = s.current ?? s.queue.find((p) => p.status === 'QUEUED') ?? null;
-  const later = s.queue.filter((p) => p.status === 'QUEUED' && p.id !== next?.id).slice(0, 2);
-  const { left, right } = usePkSides();
-  const isRotatePrompt = next?.format === 'PK' && !wide;
+  const v = j.view;
+  const other = v.mode === 'other';
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'bottom']}>
-      <MatchBar onHome={() => router.replace('/')} matchNo={next?.matchNo} ring={s.ring.name} category={next?.category ?? 'No performance scheduled'} round={next?.round} judgeNo={s.me?.judgeNo} connection="online" compact={!wide} />
+      <MatchBar onHome={() => router.push('/ring-status')} matchNo={v.gameNo || undefined} ring={`Ring ${v.ring}`} category={v.category || 'No performance scheduled'} round={v.round || undefined} judgeNo={v.seat ?? undefined} connection={v.conn ? 'online' : 'offline'} compact={!wide} />
       <ScrollView contentContainerStyle={[styles.body, { flexDirection: wide ? 'row' : 'column' }]}>
         <View style={[styles.wait, { flex: wide ? 1 : undefined }]}>
           <View style={[styles.ring, { backgroundColor: c.surfaceRaised, borderColor: c.hairline }]}>
             <Icon name="clock" size={40} color={c.goldText} stroke={1.75} />
           </View>
           <Txt v="title" style={{ fontSize: 26, lineHeight: 32, textAlign: wide ? 'left' : 'center' }}>
-            {s.current?.stopReason ? 'Game stopped by the operator' : s.current?.status === 'CALLED' || s.current?.status === 'ON_MAT' ? 'Athletes are on their way' : 'Waiting for the ring operator'}
+            {other && v.notice ? v.notice.text : 'Waiting for the ring operator'}
           </Txt>
           <Txt v="body" color="inkMuted" style={{ textAlign: wide ? 'left' : 'center' }}>
-            {s.current?.stopReason ? `Reason: ${s.current.stopReason}. Scoring is closed for this game. ` : ''}
             Scoring opens here the moment the operator starts the performance. Keep the screen on; you do not need to tap anything.
-            {isRotatePrompt ? ' This is a PK bout: scoring opens in landscape, so turn your phone sideways.' : ''}
           </Txt>
           <View style={{ flexDirection: 'row', gap: space[2], flexWrap: 'wrap', justifyContent: wide ? 'flex-start' : 'center' }}>
-            <StatusPill status="online" detail="synced" />
+            <StatusPill status={v.conn ? 'online' : 'offline'} detail={v.conn ? 'synced' : undefined} />
             <StatusPill status="locked" label="Scoring closed" />
           </View>
         </View>
-        {next ? (
+        {v.next.length ? (
           <View style={[styles.next, { backgroundColor: c.surface, borderColor: c.hairline, width: wide ? 380 : undefined }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Txt v="overline" color="inkMuted">{s.current ? 'On the mat' : 'Up next'}</Txt>
-              <Txt v="label">Match {next.matchNo} · {next.form}</Txt>
-            </View>
-            {next.format === 'PK' && next.hong ? (
-              <>
-                <AthletePlate side={left} mirror={false} athlete={left === 'chung' ? next.chung : next.hong} showScores={false} compact />
-                <Txt v="overline" color="inkMuted" style={{ textAlign: 'center' }}>vs</Txt>
-                <AthletePlate side={right} mirror athlete={right === 'chung' ? next.chung : next.hong} showScores={false} compact />
-              </>
-            ) : (
-              <AthletePlate side="solo" athlete={next.chung} tag={next.chung.entryId} showScores={false} compact />
-            )}
-            {later.length ? <Txt v="overline" color="inkMuted" style={{ marginTop: space[2] }}>Later on this ring</Txt> : null}
-            {later.map((p) => (
-              <View key={p.id} style={[styles.q, { backgroundColor: c.surfaceRaised }]}>
-                <Txt v="label">Match {p.matchNo}</Txt>
-                <Txt v="caption" color="inkMuted" numberOfLines={1} style={{ flexShrink: 1 }}>{p.category}</Txt>
+            <Txt v="overline" color="inkMuted">Up next</Txt>
+            {v.next.map((g) => (
+              <View key={g.gameNo} style={[styles.q, { backgroundColor: c.surfaceRaised }]}>
+                <Txt v="label">Game {g.gameNo} · {g.label}</Txt>
               </View>
             ))}
           </View>
         ) : null}
       </ScrollView>
-      <View style={styles.foot}>
-        <Txt v="caption" color="inkMuted">Signed in as Judge {s.me?.judgeNo} · {s.me?.name} · {s.ring.name}</Txt>
-        {!AUTO_SIGN_IN ? (
-          <View style={{ flexDirection: 'row', gap: space[2] }}>
-            <Button label="Change seat" icon="swap" variant="ghost" onPress={() => router.replace({ pathname: '/rings', params: { as: 'judge' } })} />
-            <Button label="Sign out" icon="signout" variant="ghost" onPress={() => { api.signOut('JUDGE'); router.replace('/sign-in'); }} />
-          </View>
-        ) : null}
-      </View>
     </SafeAreaView>
   );
 }
@@ -85,5 +56,4 @@ const styles = StyleSheet.create({
   ring: { width: 84, height: 84, borderRadius: 42, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   next: { borderRadius: radius.md, borderWidth: 1, padding: space[4], gap: space[2] },
   q: { flexDirection: 'row', justifyContent: 'space-between', gap: space[3], padding: space[3], borderRadius: radius.sm },
-  foot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space[4] },
 });

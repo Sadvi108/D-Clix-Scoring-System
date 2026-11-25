@@ -2,39 +2,42 @@
 // score is locked; only the chief referee can reopen it.
 import { View } from 'react-native';
 import { KeypadCapture } from '@/device/keypad';
-import { isFreestyle } from '@/sports/poomsae/rules';
+import type { Side } from '@/live/judgeView';
 import { space } from '@/theme/tokens';
 import { Button, Txt, f1 } from '@/ui/primitives';
 import { CenterSheet } from '@/ui/sheet';
-import type { useJudge } from './useJudge';
+import type { JudgeModel } from './model';
 
-export function ConfirmSend({ j }: { j: ReturnType<typeof useJudge> }) {
-  const { s, cur, sides, chung, hong, confirming, confirmSend, cancelSend } = j;
-  if (!confirming || !cur) return null;
-  const fs = isFreestyle(s.rules);
-  const pk = cur.format === 'PK' && !!cur.hong;
+export function ConfirmSend({ j }: { j: JudgeModel }) {
+  const v = j.view;
+  if (!j.confirming || !j.sheet) return null;
+  const free = v.mode === 'freestyle';
+  const pk = !!v.chung && !!v.hong;
+  const sides: Side[] = pk ? ['chung', 'hong'] : ['chung'];
+  const [first, second] = j.sheet.sections;
   return (
-    <CenterSheet title="Send your score?" subtitle={`Match ${cur.matchNo} · ${cur.form}${pk ? '' : ` · Form ${cur.formNo}`}`} onClose={cancelSend} width={pk ? 620 : 460}>
-      <KeypadCapture onAction={(a) => { if (a.kind === 'send') confirmSend(); else if (a.kind === 'cancel') cancelSend(); }} />
+    <CenterSheet title="Send your score?" subtitle={`Game ${v.gameNo} · ${v.formName}${v.formCount > 1 ? ` · Form ${v.formNo} of ${v.formCount}` : ''}`} onClose={j.cancelSend} width={pk ? 620 : 460}>
+      <KeypadCapture onAction={(a) => { if (a.kind === 'send') j.confirmSend(); else if (a.kind === 'cancel') j.cancelSend(); }} />
       <View style={{ flexDirection: 'row', gap: space[3] }}>
         {sides.map((sd) => {
-          const m = sd === 'chung' ? chung : hong;
-          const ath = sd === 'chung' ? cur.chung : cur.hong!;
+          const side = v[sd];
+          if (!side) return null;
+          const cl = side.calc;
           return (
             <View key={sd} style={{ flex: 1, gap: 4 }}>
-              <Txt v="label" color={pk ? (sd === 'chung' ? 'chungText' : 'hongText') : 'chungText'} numberOfLines={1}>{ath.name}</Txt>
-              <Row k={fs ? 'Technical' : 'Accuracy'} v={f1(m.accuracy)} />
-              <Row k="Presentation" v={f1(m.presentation)} />
-              {fs && m.deduction > 0 ? <Row k="Deductions" v={`−${f1(m.deduction)}`} /> : null}
-              <Row k="Total" v={f1(m.total)} strong />
+              <Txt v="label" color={pk ? (sd === 'chung' ? 'chungText' : 'hongText') : 'chungText'} numberOfLines={1}>{side.athlete.name}</Txt>
+              <Row k={first.label} v={f1(cl ? (free ? cl.techSum : cl.acc) : null)} />
+              <Row k={second?.label ?? 'Presentation'} v={f1(cl?.ok ? (free ? cl.presSum : cl.pres) : null)} />
+              {free && cl && cl.ded > 0 ? <Row k="Deductions" v={`−${f1(cl.ded)}`} /> : null}
+              <Row k="Total" v={f1(cl?.ok ? cl.tot : null)} strong />
             </View>
           );
         })}
       </View>
       <Txt v="caption" color="inkMuted">You cannot change the score after sending. Only the chief referee can reopen it.</Txt>
       <View style={{ flexDirection: 'row', gap: space[3], justifyContent: 'flex-end' }}>
-        <Button label="Back" variant="secondary" onPress={cancelSend} />
-        <Button label="Send" icon="send" onPress={confirmSend} style={{ minWidth: 160 }} />
+        <Button label="Back" variant="secondary" onPress={j.cancelSend} />
+        <Button label="Send" icon="send" onPress={j.confirmSend} style={{ minWidth: 160 }} />
       </View>
     </CenterSheet>
   );
