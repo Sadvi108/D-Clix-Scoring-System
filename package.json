@@ -28,9 +28,11 @@
     "react-native-svg": "15.16.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.7",
     "@types/react": "~19.3.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~58.0.4",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -40,6 +42,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
+    "test": "tsx --tsconfig tsconfig.json --test \"src/**/*.test.ts\"",
     "build:android": "npx eas-cli@latest build --platform android --profile preview",
     "build:ios": "npx eas-cli@latest build --platform ios --profile preview",
     "build:ios-sim": "npx eas-cli@latest build --platform ios --profile preview-simulator",
