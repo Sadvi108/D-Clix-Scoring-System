@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { apiMode, applyServerUrl } from '@/data';
+import { applyServerUrl } from '@/data';
 import { KEYPAD_MAP, KeypadCapture, keyToAction } from '@/device/keypad';
 import { useLink, useLinkPill } from '@/device/network';
 import { normaliseServerUrl, updateDeviceSettings, useDeviceSettings } from '@/device/settings';
@@ -110,9 +110,8 @@ export default function Connection() {
                 {test.state === 'testing' ? <ActivityIndicator color={c.goldText} /> : null}
               </View>
               <Notice tone={test.state === 'ok' ? 'ok' : 'alert'} text={test.state === 'ok' || test.state === 'fail' ? test.text ?? null : null} />
-              {apiMode === 'mock' ? (
-                <Notice tone="info" text="This build uses the built-in demo data, so scoring works without a server. The address is saved and used once the live server is switched on." />
-              ) : null}
+              <Notice tone="info" text="Leave the address empty to use the UAT server. A saved address is used from the next sign-in." />
+              <Button label="Live status" icon="list" variant="secondary" onPress={() => router.push('/ring-status')} />
             </Panel>
           </View>
 
