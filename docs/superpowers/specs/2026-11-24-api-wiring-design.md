@@ -2,6 +2,7 @@
 
 Date: 2026-11-24
 Status: approved in discussion, waiting for written review
+Updated: 2026-11-25 for the backend's latest web app (`live.php`, 918 lines; API still 1.3.4)
 
 ## Goal
 
@@ -26,7 +27,9 @@ flows that the OpenAPI document leaves as plain `object`.
 src/api/        typed client, no React
   client.ts     fetch wrapper: base URL, Bearer token, Accept-Language, X-App-Version.
                 Unwraps {ok,data}; throws ApiError {code, message, params, http}. 15 s timeout.
-                Network failure throws code OFFLINE.
+                Network failure throws code OFFLINE. PUT (and any method other than GET/POST)
+                is sent as POST with `X-HTTP-Method-Override: PUT`, because the UAT server
+                (IIS) answers 405 to PUT.
   types.ts      server shapes: Profile, Rings, RingState, Current, Clock, Seat, Sheet, Receipt,
                 Review, Options, Overview, HistoryList, HistoryDetail, Rounds, RoundResults,
                 Display, Meta, Languages, Texts.
@@ -39,8 +42,9 @@ src/live/       runtime state; small stores read with useSyncExternalStore
                 standby, 2 s retry offline. Judges send `since`. Tracks conn and lastSync.
                 Sends `unsent` from the outbox.
   outbox.ts     queued score sends in AsyncStorage (see "Outbox").
-  judgeDraft.ts local values per game|form|corner; restore from current.my.draft;
-                PUT /draft debounced 600 ms.
+  judgeDraft.ts local values per ring|game|form|corner; restore from current.my.draft;
+                PUT /draft debounced 600 ms. Local values, sheets and send ids are keyed by
+                ring and cleared on seat claim and sign-out.
   texts.ts      GET /languages and /texts/{lang}, cached with version; t(key, params) with
                 English fallback.
   hooks.ts      useSession, useRingState, useSheet, useReview, useOptions, useOverview,
@@ -50,8 +54,16 @@ src/data/legacy/ old ScoringApi, MockScoringApi and seeds, imported only by the
 ```
 
 `sports/poomsae/scoring.ts` and `rules.ts` no longer compute totals. The judge screen shows a
-provisional total from the sheet (accuracy max minus deductions, plus items), as `live.php`
-does. The server's figures are official.
+provisional total from the sheet, the same way `live.php` does:
+
+- First part = `sections[0].max` (Recognized accuracy) or, when `sections[0].items` exists
+  (Freestyle technical items), the sum of those items.
+- Each deduction key has a `target`: `ACCURACY` (default) comes off the first part,
+  `PRESENTATION` off presentation, `TOTAL` off presentation first and then the first part.
+- Presentation = sum of `sections[1].items`. Total = first part + presentation, never below 0.
+- Every item of both sections must be picked before Send.
+
+The server's figures are official.
 
 Base URL: `EXPO_PUBLIC_API_URL` (default UAT). `device/settings.serverUrl` (Connection screen)
 overrides it on a tablet.
@@ -68,7 +80,7 @@ overrides it on a tablet.
 | Clock | `POST /games/{id}/start`, `/pause`, `/resume`, `/stop` |
 | Result | `GET /games/{id}/review`, `POST /games/{id}/release`, `/declare`, `/walkover`, `/tie` |
 | Operator | `POST /games/{id}/enter-for-seat`, `/no-show`, `/withdraw` |
-| PK forms | `GET` / `PUT /games/{id}/forms` (client only; no screen in this pass) |
+| PK forms | `GET` / `PUT /games/{id}/forms` |
 | More actions | `GET /games/{id}/options`, `POST /games/{id}/penalty`, `POST /penalties/{id}/void`, `POST /games/{id}/restart`, `/disqualify`, `/reinstate` |
 | Chief | `GET /rings/overview`, `GET /history`, `GET /history/{id}`, `GET /rounds`, `GET /rounds/{id}/results`, `POST /rounds/{id}/qualify` |
 
@@ -85,6 +97,8 @@ overrides it on a tablet.
   with `confirmReplace: true`.
 - Rings (`/rings`, `GET /rings`): judges tap a used, free seat (`POST /seat/claim {ring,
   seat}`); operator and chief tap "Open ring" (`{ring}`). Then `GET /me`.
+- Moving away from a ring or seat already held asks first ("Move from Ring A · J2 to Ring B ·
+  J3?"). Sign out also asks first.
 - Chief: after claiming, `/referee`; the chief tabs (`/chief/*`) stay reachable.
 
 ### Judge (`/judge`)
@@ -94,6 +108,9 @@ Data: `/ring/state` `current` and `GET /games/{id}/sheet`.
 - Deduction keys from `sheet.sections[0].keys` with count and per-key undo; items from
   `sections[1].items`; the number grid lists min..max on `step`. PK: blue and red panes, swap
   supported. Cut-off: one pane.
+- Freestyle (`current.free`, or `sections[0].items` present): technical items and
+  presentation items side by side, each with its subtotal; deduction keys in a row with
+  "Deductions −x.x". The send confirmation lists technical items, deductions and presentation.
 - Locked when `!scoringOpen` (banner: waiting for the operator, paused or stopped), when
   `my.sent`, or when `method` is `OTHER` (read-only "Scored by another method").
 - Every item must be picked before Send. Send opens the confirmation sheet, then the outbox.
@@ -107,20 +124,32 @@ Data: `/ring/state` `current` and `GET /games/{id}/sheet`.
   "Time up". Buttons by stage: `ON_MAT` → Start form N; `SCORING_OPEN` → Pause, Stop;
   paused → Resume, Stop.
 - Judge tiles from `seats`: EMPTY, WAITING, DRAFT, SENT, OFFLINE, unsent count, device,
-  totals. Tile sheet: Enter scores (`enter-for-seat`, full grid or `useMax`, reason required)
-  and Free seat (`POST /seat/release`).
-- Live judge table from `seats[].draft` and sent totals.
-- When stage is `JUDGES_SENT` or `WITH_CHIEF`, or the clock is `STOPPED`: `GET /review` shows
-  the provisional result with trim marks and the PK suggestion.
+  total plus accuracy (technical) · presentation for sent and draft scores. Tile sheet: Enter
+  scores (`enter-for-seat`, full grid or `useMax`, reason required; only while
+  `SCORING_OPEN` and the seat has not sent) and Free seat (`POST /seat/release`; hidden for an
+  EMPTY seat).
+- Judge board (replaces the live table and the judge row of the provisional result): one
+  column per athlete, one row per seat with accuracy, presentation and total. Yellow = draft
+  (`seats[].draft`), green = sent (`seats[].scores`). Dropped figures are struck through from
+  the review (`counted`, and per part `accCounted` / `presCounted` with HIGH / LOW). Footer:
+  the average (`provisional`). A full-screen toggle for the venue table.
+- `GET /review` is loaded when the stage is `ON_MAT`, `SCORING_OPEN`, `JUDGES_SENT` or
+  `WITH_CHIEF`, or the clock is `STOPPED`, so forms already sent show while the next one is
+  scored. `PANEL_INCOMPLETE` means nothing to show yet (no card, not an error). It shows the
+  provisional result with trim marks, parts per judge and the PK suggestion.
   - PK: Declare blue or red (confirmation, optional reason). `suggested: TIE`: chief only.
   - Cut-off: Release. Outcome `TIE_OPEN`: the chief sees the tie panel (winner, or rematch with
     a chosen form).
 - PK walkover (absent corner, NO_SHOW / WITHDRAWN / DISQUALIFIED). Cut-off no-show or withdraw
   while `ON_MAT` (reason required).
+- PK forms (operator and chief, `method: APP`, not released): "Forms of this game" opens
+  `GET /games/{id}/forms`: one dropdown per form from `available`, add / remove (1 to 10),
+  reason, Save (`PUT /games/{id}/forms`). Read-only when `locked` (a referee has sent).
 - More actions (`GET /options`): penalty with types per rule set (`appliedBy`,
   `requireReason`); chief: remove penalty, restart, re-perform, disqualify, reinstate.
 - Display: Call-up, Live clock, Result (`PUT /ring/display`) and the TV link
-  (`POST /ring/display-link`) with copy and open.
+  (`POST /ring/display-link`) with copy and open. The link follows the operator's display
+  mode, or can be fixed to one view by adding `&mode=callup|clock|result`.
 
 ### Chief screens
 
@@ -128,7 +157,10 @@ Data: `/ring/state` `current` and `GET /games/{id}/sheet`.
 - `/chief/history` and `/chief/game/[id]`: `GET /history` (ring switch, search) and
   `GET /history/{id}` (result, referee figures, audit from the server).
 - `/chief/rounds`: `GET /rounds`; tapping a round opens `/results?round=` →
-  `GET /rounds/{id}/results` with "Confirm qualifiers" when `canConfirm`.
+  `GET /rounds/{id}/results` with "Confirm qualifiers" when `canConfirm`. The `/rounds` reply
+  also carries `pk`: head-to-head categories with their games (round, game no., winner,
+  loser); tapping a game opens its history detail. Column label "Technical" instead of
+  "Accuracy" when the round is Freestyle (`free`).
 
 ### Header on signed-in screens
 
@@ -152,7 +184,7 @@ One path keyed on `ApiError.code`:
 - Anything else: toast with the server `message` (already in the chosen language).
 
 Final actions (release, declare, walkover, stop, tie, qualify, restart, disqualify, reinstate,
-enter-for-seat, void penalty) always open a confirmation sheet with a reason box (required
+enter-for-seat, void penalty, change PK forms) always open a confirmation sheet with a reason box (required
 where the API requires it) before sending `confirmed: true`.
 
 Heartbeat: a failed poll sets offline. A banner on every screen shows "Offline · last sync
@@ -192,6 +224,13 @@ send with Wi-Fi off. `tsc` and `expo lint` must pass.
 
 Needed before the live pass: UAT PINs for judge, operator and chief (kept out of code and
 git), and agreement that the test may change UAT data.
+
+## Differences from the web app on purpose
+
+- Token: the web app keeps it per browser tab (sessionStorage). The tablet keeps it in
+  AsyncStorage so a judge stays signed in after the app restarts (one device per account is
+  enforced by the server).
+- Score sends go through the outbox (the web app only retries by hand).
 
 ## Rollout
 
