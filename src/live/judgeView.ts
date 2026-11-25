@@ -52,12 +52,18 @@ export interface JudgeViewInput {
   lastEvent: OutboxEvent | null;
   /** Milliseconds since the full state arrived (moves the clock). */
   sinceRecvMs: number;
+  /** When `lastEvent` happened (ms since epoch). */
+  lastEventAt: number;
+  /** When the latest full state arrived (ms since epoch). */
+  stateAt: number;
 }
 
 export const sideOf = (c: Corner): Side => (c === 'RED' ? 'hong' : 'chung');
 
 function canTap(k: SheetKey, c: Calc | null) {
   if (!c) return true;
+  // Freestyle keys take from the total; until the items are set the total reads 0, so stay open.
+  if ((k.target === 'TOTAL' || k.target === 'PRESENTATION') && !c.ok) return true;
   const room = k.target === 'PRESENTATION' ? c.pres : k.target === 'TOTAL' ? c.tot : c.acc;
   return room >= Math.abs(k.value) - 1e-9;
 }
@@ -89,13 +95,15 @@ export function buildJudgeView(i: JudgeViewInput): JudgeView {
 
   const formNo = cur?.formNo ?? 1;
   const ev = i.lastEvent && cur && i.lastEvent.job.gameId === cur.gameId && i.lastEvent.job.formNo === formNo ? i.lastEvent : null;
-  const sent = !!cur?.my?.sent;
+  const sent = !!cur?.my?.sent || (ev?.kind === 'sent' && i.lastEventAt >= i.stateAt);
   const failed = !sent && !i.queued && ev?.kind === 'rejected';
   const paused = cur?.waiting === 'PAUSED' || cur?.clock?.state === 'PAUSED';
   const stopped = cur?.waiting === 'STOPPED' || cur?.clock?.state === 'STOPPED';
+  const serverLocked = !!cur?.readOnly || !!cur?.my?.locked;
+  const open = !!cur?.scoringOpen && !paused && !stopped && !serverLocked;
   const sendState: JudgeSendState = sent ? 'sent' : i.queued ? 'sending' : failed ? 'failed'
-    : !cur?.scoringOpen ? (paused ? 'paused' : 'waiting') : missing > 0 || !i.sheet ? 'incomplete' : 'ready';
-  const locked = !cur || mode === 'other' || !cur.scoringOpen || sent || i.queued;
+    : !open ? (paused ? 'paused' : 'waiting') : missing > 0 || !i.sheet ? 'incomplete' : 'ready';
+  const locked = !cur || mode === 'other' || !open || sent || i.queued;
 
   let notice: JudgeNotice | null = null;
   if (cur) {
@@ -103,6 +111,7 @@ export function buildJudgeView(i: JudgeViewInput): JudgeView {
     else if (sent) notice = { icon: 'check', text: 'Sent. Waiting for the other referees and the operator.' };
     else if (i.queued) notice = { icon: 'clock', text: i.conn ? 'Sending your score…' : 'Saved on this tablet · it will be sent when the connection is back.' };
     else if (!i.conn) notice = { icon: 'alert', text: 'Offline · your taps are kept on this tablet.' };
+    else if (serverLocked) notice = { icon: 'pause', text: 'Scoring is locked for this form.' };
     else if (paused) notice = { icon: 'pause', text: 'Paused by the operator. Scoring is locked.' };
     else if (stopped) notice = { icon: 'pause', text: 'Game stopped by the operator. Scoring is closed.' };
     else if (!cur.scoringOpen) notice = { icon: 'clock', text: 'Waiting for the operator to start…' };

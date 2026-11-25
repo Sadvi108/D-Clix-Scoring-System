@@ -40,3 +40,8 @@ test('a break counts down its own time', () => {
   const v = clockView({ state: 'BREAK', running: false, remainingMs: null, elapsedMs: 0, break: { kind: 'BETWEEN_GAMES', remainingMs: 30000 } }, 10000);
   assert.deepEqual(v, { text: '0:20', running: true, over: false, label: 'Break' });
 });
+
+test('negative time since the state arrived is treated as zero', () => {
+  const v = clockView({ state: 'RUNNING', running: true, remainingMs: 60000, elapsedMs: 30000 }, -5000);
+  assert.equal(v.text, '1:00');
+});

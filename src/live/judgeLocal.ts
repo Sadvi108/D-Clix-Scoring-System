@@ -13,7 +13,7 @@ const key = (c: LocalCtx, corner: Corner) => `${formKey(c)}|${corner}`;
 
 export function createJudgeLocal(o: {
   save: (gameId: string, formNo: number, scores: ScoreEntry[]) => Promise<unknown>;
-  canSave: () => boolean;
+  canSave: (ctx: LocalCtx) => boolean;
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (handle: unknown) => void;
   debounceMs?: number;
@@ -38,7 +38,7 @@ export function createJudgeLocal(o: {
       timer = null;
       const p = pending;
       pending = null;
-      if (p && o.canSave()) o.save(p.gameId, p.formNo, payload(p)).catch(() => { /* the final send carries everything */ });
+      if (p && o.canSave(p)) o.save(p.gameId, p.formNo, payload(p)).catch(() => { /* the final send carries everything */ });
     }, o.debounceMs ?? 600);
   }
 
@@ -79,6 +79,12 @@ export function createJudgeLocal(o: {
         }
         return { values };
       });
+    },
+    /** Drop the pending draft save (the final send is about to carry everything). */
+    cancelDraft() {
+      if (timer != null) o.clearTimer(timer);
+      timer = null;
+      pending = null;
     },
     /** Another official or ring: forget everything. */
     clear() {

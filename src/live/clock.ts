@@ -14,7 +14,8 @@ export function fmt(ms: number | null): string {
 const LABEL: Record<string, string> = { PAUSED: 'Paused', STOPPED: 'Stopped', READY: 'Ready' };
 
 /** @param sinceMs milliseconds since the state carrying this clock arrived. */
-export function clockView(c: Clock | null | undefined, sinceMs: number): ClockView {
+export function clockView(c: Clock | null | undefined, sincePlain: number): ClockView {
+  const sinceMs = Math.max(0, sincePlain);
   if (!c) return { text: '--:--', running: false, over: false, label: '' };
   const onBreak = c.state === 'BREAK' || (c.break?.remainingMs != null && c.state !== 'RUNNING' && c.state !== 'PAUSED' && c.state !== 'STOPPED');
   if (onBreak) {

@@ -65,6 +65,8 @@ export function useJudgeLive(): JudgeModel {
     local: (corner: Corner) => (ctx ? judgeLocal.get(ctx, corner) : { ded: {}, items: {} }),
     queued,
     lastEvent: note.last,
+    lastEventAt: note.at,
+    stateAt: live.stateAt,
     sinceRecvMs: Math.max(0, now - live.stateAt),
   });
 
@@ -77,6 +79,7 @@ export function useJudgeLive(): JudgeModel {
     setConfirming,
     onSend: () => {
       if (!ctx || !p) return;
+      judgeLocal.cancelDraft();
       void outbox
         .add({ ring: ctx.ring, gameId: ctx.gameId, formNo: ctx.formNo, scores: judgeLocal.payload(ctx), officialId: p.officialId })
         .then(() => poller.pollNow());

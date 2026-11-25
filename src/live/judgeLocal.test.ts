@@ -6,16 +6,17 @@ import { createJudgeLocal, type LocalCtx } from './judgeLocal';
 const ctx: LocalCtx = { ring: 'A', gameId: 'g-101', formNo: 1, corners: ['BLUE', 'RED'] };
 
 function setup(canSave = true) {
+  const seen: LocalCtx[] = [];
   const saves: { gameId: string; formNo: number; scores: ScoreEntry[] }[] = [];
   let pending: (() => void) | null = null;
   const timers: number[] = [];
   const local = createJudgeLocal({
     save: async (gameId, formNo, scores) => { saves.push({ gameId, formNo, scores }); },
-    canSave: () => canSave,
+    canSave: (c) => { seen.push(c); return canSave; },
     setTimer: (fn, ms) => { pending = fn; timers.push(ms); return 1; },
     clearTimer: () => { pending = null; },
   });
-  return { local, saves, timers, fire: () => { const f = pending; pending = null; f?.(); } };
+  return { local, saves, timers, seen, fire: () => { const f = pending; pending = null; f?.(); } };
 }
 
 test('tap and undo count per key; undo never goes below zero', () => {
@@ -91,4 +92,20 @@ test('clear forgets everything', () => {
   assert.deepEqual(local.get(ctx, 'BLUE'), { ded: {}, items: {} });
   local.restore(ctx, [{ corner: 'BLUE', deductions: { ACC_01: 1 }, items: {} }]);
   assert.deepEqual(local.get(ctx, 'BLUE').ded, { ACC_01: 1 });
+});
+
+test('cancelDraft drops the pending save', () => {
+  const s = setup();
+  s.local.tap(ctx, 'BLUE', 'ACC_01');
+  s.local.cancelDraft();
+  s.fire();
+  assert.equal(s.saves.length, 0);
+  assert.equal(s.seen.length, 0);
+});
+
+test('canSave is asked with the pending form', () => {
+  const s = setup();
+  s.local.tap(ctx, 'BLUE', 'ACC_01');
+  s.fire();
+  assert.deepEqual(s.seen, [ctx]);
 });

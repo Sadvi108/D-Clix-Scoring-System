@@ -48,7 +48,7 @@ export const session = createSession({ api, kv: asyncStorageKV, device, lang: ()
 sessionToken = () => session.token();
 
 /** Last outbox result, for the judge screen ("Sent" or why it was refused). */
-export const outboxNotice = createStore<{ last: OutboxEvent | null }>({ last: null });
+export const outboxNotice = createStore<{ last: OutboxEvent | null; at: number }>({ last: null, at: 0 });
 
 export const outbox = createOutbox({
   kv: asyncStorageKV,
@@ -57,7 +57,7 @@ export const outbox = createOutbox({
   uuid,
   now: () => new Date(),
   onEvent: (e) => {
-    outboxNotice.set({ last: e });
+    outboxNotice.set({ last: e, at: Date.now() });
   },
   canSend: (job) => {
     const s = session.store.get();
@@ -89,10 +89,12 @@ export const poller = createRingPoller({
 /** The judge's taps; saved as a draft only while the form is open, not yet sent, and the link is up. */
 export const judgeLocal = createJudgeLocal({
   save: (gameId, formNo, scores) => api.saveDraft(gameId, formNo, scores),
-  canSave: () => {
+  canSave: (c) => {
     const live = poller.store.get();
     const cur = live.state?.current;
-    return live.conn && !!cur?.scoringOpen && !cur.my?.sent;
+    if (!live.conn || !cur || cur.gameId !== c.gameId || (cur.formNo ?? 1) !== c.formNo) return false;
+    if (!cur.scoringOpen || cur.my?.sent) return false;
+    return !outbox.store.get().jobs.some((j) => j.ring === c.ring && j.gameId === c.gameId && j.formNo === c.formNo);
   },
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),

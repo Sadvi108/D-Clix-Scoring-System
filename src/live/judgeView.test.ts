@@ -12,7 +12,7 @@ function input(current: Current | null, p: Partial<JudgeViewInput> = {}, locals:
   return {
     state: ringState(current), seat: 2, conn: true, sheet: recognizedSheet,
     local: (c) => locals[c] ?? { ded: {}, items: {} },
-    queued: false, lastEvent: null, sinceRecvMs: 0, ...p,
+    queued: false, lastEvent: null, lastEventAt: 0, stateAt: 0, sinceRecvMs: 0, ...p,
   };
 }
 
@@ -94,4 +94,51 @@ test('header fields: game, ring, seat, category, round, form and next games', ()
   assert.deepEqual([v.formNo, v.formCount, v.formName], [2, 2, 'Taegeuk 8']);
   assert.deepEqual(v.next, [{ gameNo: '102', label: 'Kang vs Silva' }]);
   assert.equal(v.clock.text, '1:00');
+});
+
+const sentEv: OutboxEvent = {
+  kind: 'sent',
+  job: { id: 'x', ring: 'A', gameId: 'g-101', formNo: 1, scores: [], clientTime: '', tries: 1 },
+  receipt: { receipt: { receivedAt: '2026-11-26T10:00:00Z' } } as never,
+};
+
+test('a sent event newer than the state counts as sent until the state catches up', () => {
+  const gap = buildJudgeView(input(pkCurrent, { lastEvent: sentEv, lastEventAt: 200, stateAt: 100 }, { BLUE: full, RED: full }));
+  assert.equal(gap.sendState, 'sent');
+  assert.equal(gap.locked, true);
+  assert.equal(gap.notice?.icon, 'check');
+  assert.equal(gap.receiptAt, '2026-11-26T10:00:00Z');
+  const caughtUp = buildJudgeView(input(pkCurrent, { lastEvent: sentEv, lastEventAt: 100, stateAt: 200 }, { BLUE: full, RED: full }));
+  assert.equal(caughtUp.sendState, 'ready');
+  assert.equal(caughtUp.locked, false);
+  const otherForm = buildJudgeView(input(pkCurrent, { lastEvent: { ...sentEv, job: { ...sentEv.job, formNo: 2 } }, lastEventAt: 200, stateAt: 100 }, { BLUE: full, RED: full }));
+  assert.equal(otherForm.sendState, 'ready');
+});
+
+test('server lock flags lock the form with a notice', () => {
+  for (const patch of [{ readOnly: true }, { my: { sent: false, locked: true } }]) {
+    const v = buildJudgeView(input({ ...pkCurrent, ...patch }, {}, { BLUE: full, RED: full }));
+    assert.equal(v.locked, true);
+    assert.equal(v.sendState, 'waiting');
+    assert.deepEqual(v.notice, { icon: 'pause', text: 'Scoring is locked for this form.' });
+  }
+  const sent = buildJudgeView(input({ ...pkCurrent, readOnly: true, my: { sent: true } }));
+  assert.equal(sent.sendState, 'sent');
+  assert.equal(sent.notice?.icon, 'check');
+});
+
+test('a paused or stopped clock locks even if scoringOpen is still true', () => {
+  const paused = buildJudgeView(input({ ...pkCurrent, clock: { state: 'PAUSED', running: false, remainingMs: 60000, elapsedMs: 30000 } }, {}, { BLUE: full, RED: full }));
+  assert.equal(paused.locked, true);
+  assert.equal(paused.sendState, 'paused');
+  const stopped = buildJudgeView(input({ ...pkCurrent, waiting: 'STOPPED' }));
+  assert.equal(stopped.locked, true);
+  assert.equal(stopped.sendState, 'waiting');
+});
+
+test('freestyle total keys stay tappable until the items are set', () => {
+  const v = buildJudgeView(input(freestyleCurrent, { sheet: freestyleSheet }));
+  assert.equal(v.chung?.can.FS_03, true);
+  const done = buildJudgeView(input(freestyleCurrent, { sheet: freestyleSheet }, { SOLO: { ded: {}, items: { T_HJ: 0, T_JK: 0, T_TN: 0, T_CK: 0, T_AC: 0, T_BA: 0, P_CR: 0, P_HA: 0, P_EE: 0, P_MC: 0 } } }));
+  assert.equal(done.chung?.can.FS_03, false);
 });
