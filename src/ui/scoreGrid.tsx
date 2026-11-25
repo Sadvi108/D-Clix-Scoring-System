@@ -9,13 +9,18 @@ import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { Button, Icon, Txt } from './primitives';
 
-export type GridRow = { key: string; label: string; sub?: string; min: number; max: number; value: number | null };
+export type GridRow = {
+  key: string; label: string; sub?: string; min: number; max: number;
+  /** Tenths between values (default 1 = 0.1). */
+  step?: number;
+  value: number | null;
+};
 export type GridPage = { title: string; rows: GridRow[]; side?: 'chung' | 'hong' | 'solo' };
 
 /** Values from max down to min (tenths), one line per point like the paper sheet: …, 2.0–1.1, then 1.0–0.0. */
-function lines(min: number, max: number): number[][] {
+function lines(min: number, max: number, step = 1): number[][] {
   const out = new Map<number, number[]>();
-  for (let v = max; v >= min; v--) {
+  for (let v = max; v >= min; v -= step) {
     const k = v <= 10 ? 1 : Math.ceil(v / 10);
     out.set(k, [...(out.get(k) ?? []), v]);
   }
@@ -66,7 +71,7 @@ export function ScoreGrid({ title, side = 'chung', pages, startPage = 0, note, o
 
           <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: compact ? 6 : 10 }}>
             {cur.rows.map((r) => {
-              const ls = lines(r.min, r.max);
+              const ls = lines(r.min, r.max, r.step);
               const width = Math.max(...ls.map((l) => l.length));
               return (
                 <View key={r.key} style={[styles.row, { borderBottomColor: c.hairline }]}>
