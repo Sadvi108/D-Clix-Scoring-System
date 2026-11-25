@@ -841,6 +841,7 @@ test('login on a device already in use asks for takeover', async () => {
     api: api({ login: async () => { throw new ApiError('DEVICE_IN_USE', 'In use', 409, { deviceLabel: 'Tab 2' }); } }),
     kv: memoryKV(), device: async () => device, lang: () => 'en',
   });
+  await s.boot();
   const r = await s.login('123456');
   assert.deepEqual(r, { kind: 'takeover', deviceLabel: 'Tab 2' });
   assert.equal(s.store.get().status, 'signedOut');
