@@ -178,3 +178,21 @@ test('load() merges with jobs already in memory (loaded first, no duplicate ids)
   await s.outbox.load();
   assert.deepEqual(s.outbox.store.get().jobs.map((j) => j.id), ['old-1', 'id-1']);
 });
+
+test('add: a throwing storage write does not reject add, and the job is still sent', async () => {
+  const kv = { ...memoryKV(), set: async () => { throw new Error('disk full'); } };
+  const s = setup([receipt()], kv);
+  await s.outbox.add(job);
+  assert.equal(s.sends.length, 1);
+  assert.equal(s.outbox.store.get().jobs.length, 0);
+});
+
+test('load: stored entries that are not job objects are dropped', async () => {
+  const good = { id: 'x1', ring: 'A', gameId: 'g-1', formNo: 1, scores: [], clientTime: 't', tries: 1 };
+  const kv = memoryKV({ 'dclix.outbox': JSON.stringify([null, 5, 'str', { ring: 'A' }, { id: 7 }, good]) });
+  const s = setup([receipt()], kv);
+  await s.outbox.load();
+  assert.deepEqual(s.outbox.store.get().jobs.map((j) => j.id), ['x1']);
+  await s.outbox.flush();
+  assert.equal(s.outbox.store.get().jobs.length, 0);
+});

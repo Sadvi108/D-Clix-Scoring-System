@@ -204,3 +204,12 @@ test('logout resolves only after the storage is cleared', async () => {
   assert.equal(await base.get('dclix.token'), null);
   assert.equal(await base.get('dclix.profile'), null);
 });
+
+test('login: a failing storage write still signs in', async () => {
+  const kv = { ...memoryKV(), set: async () => { throw new Error('disk full'); } };
+  const s = mk(api(), kv);
+  const r = await s.login('123456');
+  assert.equal(r.kind, 'ok');
+  assert.equal(s.store.get().status, 'signedIn');
+  assert.equal(s.store.get().token, 't-1');
+});

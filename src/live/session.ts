@@ -77,7 +77,7 @@ export function createSession(o: { api: SessionApi; kv: KV; device: () => Promis
     loggingIn = true;
     try {
       const data = await o.api.login({ pin, device: await o.device(), lang: o.lang(), confirmReplace });
-      await save(data.token, data.profile);
+      try { await save(data.token, data.profile); } catch { /* signed in for this run; storage is repaired next time */ }
       epoch++;
       store.set({ status: 'signedIn', token: data.token, profile: data.profile, message: '' });
       return { kind: 'ok', profile: data.profile };

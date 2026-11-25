@@ -46,7 +46,9 @@ export function createOutbox(o: {
     try {
       const raw = await o.kv.get(KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) loaded = parsed as OutboxJob[];
+      if (Array.isArray(parsed)) {
+        loaded = parsed.filter((j): j is OutboxJob => !!j && typeof j === 'object' && typeof (j as { id?: unknown }).id === 'string');
+      }
     } catch { /* unreadable storage: start empty */ }
     store.set((s) => {
       const ids = new Set(loaded.map((j) => j.id));
@@ -113,7 +115,7 @@ export function createOutbox(o: {
     if (loading) await loading;
     const job: OutboxJob = { ...input, id: o.uuid(), clientTime: o.now().toISOString(), tries: 0 };
     store.set((s) => ({ jobs: [...s.jobs, job] }));
-    await persist();
+    await persistQuietly();
     await flush();
     return job;
   }
