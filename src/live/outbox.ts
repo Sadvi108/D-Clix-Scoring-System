@@ -20,8 +20,13 @@ export type OutboxEvent =
   | { kind: 'rejected'; job: OutboxJob; code: string; message: string };
 
 const KEY = 'dclix.outbox';
+// Anything that may succeed later keeps the job. Auth codes keep it too: the session signs out
+// elsewhere and the job is resent after the judge logs in again.
+const KEEP_CODES = ['OFFLINE', 'RATE_LIMITED', 'SERVER_ERROR', 'AUTH_REQUIRED', 'TOKEN_EXPIRED', 'RESEATED'];
 const retryable = (e: unknown) =>
-  !(e instanceof ApiError) || e.code === 'OFFLINE' || e.code === 'RATE_LIMITED' || e.http >= 500 || e.http === 0;
+  !(e instanceof ApiError) ||
+  KEEP_CODES.includes(e.code) ||
+  e.http === 0 || e.http === 408 || e.http === 429 || e.http >= 500;
 
 export function createOutbox(o: {
   kv: KV;
@@ -34,40 +39,78 @@ export function createOutbox(o: {
 
   const persist = () => o.kv.set(KEY, JSON.stringify(store.get().jobs));
 
-  async function load() {
-    const raw = await o.kv.get(KEY);
-    store.set({ jobs: raw ? (JSON.parse(raw) as OutboxJob[]) : [] });
+  let loading: Promise<void> | null = null;
+
+  async function doLoad() {
+    let loaded: OutboxJob[] = [];
+    try {
+      const raw = await o.kv.get(KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) loaded = parsed as OutboxJob[];
+    } catch { /* unreadable storage: start empty */ }
+    store.set((s) => {
+      const ids = new Set(loaded.map((j) => j.id));
+      return { jobs: [...loaded, ...s.jobs.filter((j) => !ids.has(j.id))] };
+    });
+  }
+
+  function load() {
+    if (!loading) loading = doLoad().finally(() => { loading = null; });
+    return loading;
+  }
+
+  const emit = (e: OutboxEvent) => {
+    try { o.onEvent(e); } catch { /* a listener bug must not break the queue */ }
+  };
+  // The in-memory queue is the truth; a failed write is repaired by the next persist.
+  const persistQuietly = () => Promise.resolve(persist()).catch(() => {});
+
+  let pending = false;
+
+  /** One pass over the queue. Returns true when it stopped on a retryable failure. */
+  async function pass(): Promise<boolean> {
+    for (const job of [...store.get().jobs]) {
+      let receipt: Receipt;
+      try {
+        receipt = await o.send(job, job.tries > 0);
+      } catch (e) {
+        const tried = { ...job, tries: job.tries + 1 };
+        if (retryable(e)) {
+          store.set((s) => ({ jobs: s.jobs.map((j) => (j.id === job.id ? tried : j)) }));
+          await persistQuietly();
+          return true; // keep order; try again on the next flush
+        }
+        store.set((s) => ({ jobs: s.jobs.filter((j) => j.id !== job.id) }));
+        await persistQuietly();
+        const err = e as ApiError;
+        emit({ kind: 'rejected', job: tried, code: err.code, message: err.message });
+        continue;
+      }
+      store.set((s) => ({ jobs: s.jobs.filter((j) => j.id !== job.id) }));
+      await persistQuietly();
+      emit({ kind: 'sent', job, receipt });
+    }
+    return false;
   }
 
   async function flush() {
-    if (store.get().sending) return;
+    if (loading) await loading;
+    if (store.get().sending) { pending = true; return; }
     store.set({ sending: true });
     try {
-      for (const job of [...store.get().jobs]) {
-        try {
-          const receipt = await o.send(job, job.tries > 0);
-          store.set((s) => ({ jobs: s.jobs.filter((j) => j.id !== job.id) }));
-          await persist();
-          o.onEvent({ kind: 'sent', job, receipt });
-        } catch (e) {
-          const tried = { ...job, tries: job.tries + 1 };
-          if (retryable(e)) {
-            store.set((s) => ({ jobs: s.jobs.map((j) => (j.id === job.id ? tried : j)) }));
-            await persist();
-            break; // keep order; try again on the next flush
-          }
-          store.set((s) => ({ jobs: s.jobs.filter((j) => j.id !== job.id) }));
-          await persist();
-          const err = e as ApiError;
-          o.onEvent({ kind: 'rejected', job: tried, code: err.code, message: err.message });
-        }
-      }
+      let stopped = false;
+      do {
+        pending = false;
+        stopped = await pass();
+      } while (pending && !stopped);
     } finally {
+      pending = false;
       store.set({ sending: false });
     }
   }
 
   async function add(input: { ring: string; gameId: string; formNo: number; scores: ScoreEntry[] }) {
+    if (loading) await loading;
     const job: OutboxJob = { ...input, id: o.uuid(), clientTime: o.now().toISOString(), tries: 0 };
     store.set((s) => ({ jobs: [...s.jobs, job] }));
     await persist();

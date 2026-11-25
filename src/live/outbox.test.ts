@@ -80,3 +80,101 @@ test('has() finds a queued form', async () => {
   assert.equal(s.outbox.has('A', 'g-1', 1), true);
   assert.equal(s.outbox.has('A', 'g-1', 2), false);
 });
+
+test('transient and auth failures keep the job, whatever the http status', async () => {
+  const errors = [
+    new ApiError('OFFLINE', 'x'),
+    new ApiError('RATE_LIMITED', 'x', 429),
+    new ApiError('SERVER_ERROR', 'captive portal html', 200),
+    new ApiError('SOMETHING', 'x', 0),
+    new ApiError('TIMEOUT', 'x', 408),
+    new ApiError('SOMETHING', 'x', 429),
+    new ApiError('SOMETHING', 'x', 502),
+    new ApiError('AUTH_REQUIRED', 'x', 401),
+    new ApiError('TOKEN_EXPIRED', 'x', 401),
+    new ApiError('RESEATED', 'x', 401),
+    new TypeError('boom'),
+  ];
+  for (const err of errors) {
+    const s = setup([err]);
+    await s.outbox.add(job);
+    assert.equal(s.outbox.store.get().jobs.length, 1, `${err.name}/${(err as ApiError).code} must be kept`);
+    assert.equal(s.events.length, 0);
+  }
+});
+
+test('other 4xx refusals are dropped and reported', async () => {
+  for (const [code, http] of [['VALIDATION_FAILED', 400], ['FORBIDDEN', 403], ['SCORING_LOCKED', 409]] as const) {
+    const s = setup([new ApiError(code, 'no', http)]);
+    await s.outbox.add(job);
+    assert.equal(s.outbox.store.get().jobs.length, 0);
+    assert.equal(s.events[0].kind, 'rejected');
+  }
+});
+
+test('a job added while a flush is running is sent in the same flush run', async () => {
+  const kv = memoryKV();
+  const sends: string[] = [];
+  const events: OutboxEvent[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  let n = 0;
+  const outbox = createOutbox({
+    kv,
+    send: async (j) => { sends.push(j.id); if (j.id === 'id-1') await gate; return receipt(); },
+    uuid: () => `id-${++n}`,
+    now: () => new Date('2026-11-25T08:00:00Z'),
+    onEvent: (e) => events.push(e),
+  });
+  const first = outbox.add(job);
+  await new Promise((r) => setImmediate(r));
+  const second = outbox.add({ ...job, formNo: 2 });
+  await new Promise((r) => setImmediate(r));
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(sends, ['id-1', 'id-2']);
+  assert.equal(outbox.store.get().jobs.length, 0);
+  assert.equal(outbox.store.get().sending, false);
+});
+
+test('a throwing listener cannot break the queue or re-send a delivered score', async () => {
+  const sends: string[] = [];
+  let n = 0;
+  const kv = memoryKV();
+  const outbox = createOutbox({
+    kv,
+    send: async (j) => { sends.push(j.id); return receipt(); },
+    uuid: () => `id-${++n}`,
+    now: () => new Date('2026-11-25T08:00:00Z'),
+    onEvent: () => { throw new Error('listener bug'); },
+  });
+  await outbox.add(job);
+  await outbox.add({ ...job, formNo: 2 });
+  assert.deepEqual(sends, ['id-1', 'id-2']);
+  assert.equal(outbox.store.get().jobs.length, 0);
+  assert.equal(await kv.get('dclix.outbox'), '[]');
+});
+
+test('load() treats corrupt or non-array storage as an empty queue', async () => {
+  for (const raw of ['{not json', '{"a":1}', 'null', '"x"']) {
+    const s = setup([], memoryKV({ 'dclix.outbox': raw }));
+    await s.outbox.load();
+    assert.deepEqual(s.outbox.store.get().jobs, []);
+  }
+});
+
+test('load() merges with jobs already in memory (loaded first, no duplicate ids); add() waits for the load', async () => {
+  const stored: OutboxJob = { id: 'old-1', ring: 'A', gameId: 'g-0', formNo: 1, scores: [], clientTime: 't', tries: 2 };
+  const base = memoryKV({ 'dclix.outbox': JSON.stringify([stored]) });
+  const kv = { ...base, get: async (k: string) => { await new Promise((r) => setTimeout(r, 20)); return base.get(k); } };
+  const s = setup([new ApiError('OFFLINE', 'x'), new ApiError('OFFLINE', 'x')], kv);
+  const loading = s.outbox.load();
+  const adding = s.outbox.add(job);
+  await Promise.all([loading, adding]);
+  assert.deepEqual(s.outbox.store.get().jobs.map((j) => j.id), ['old-1', 'id-1']);
+  assert.deepEqual(JSON.parse((await base.get('dclix.outbox'))!).map((j: OutboxJob) => j.id), ['old-1', 'id-1']);
+
+  // loading the same stored job again does not duplicate it
+  await s.outbox.load();
+  assert.deepEqual(s.outbox.store.get().jobs.map((j) => j.id), ['old-1', 'id-1']);
+});
