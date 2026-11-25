@@ -6,7 +6,13 @@ import type { Endpoints } from '../api/endpoints';
 import type { RingState, Role } from '../api/types';
 import { createStore } from './store';
 
-export interface LiveState { state: RingState | null; conn: boolean; lastSync: number }
+export interface LiveState {
+  state: RingState | null;
+  conn: boolean;
+  lastSync: number;
+  /** When the last full state arrived (the clock runs from it). */
+  stateAt: number;
+}
 
 export function createRingPoller(o: {
   api: Pick<Endpoints, 'ringState'>;
@@ -18,7 +24,7 @@ export function createRingPoller(o: {
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (handle: unknown) => void;
 }) {
-  const store = createStore<LiveState>({ state: null, conn: true, lastSync: 0 });
+  const store = createStore<LiveState>({ state: null, conn: true, lastSync: 0, stateAt: 0 });
   let timer: unknown = null;
   // Bumped by stop(): a request that started before a stop() must not touch the store or schedule.
   let gen = 0;
@@ -47,7 +53,7 @@ export function createRingPoller(o: {
         // Nothing new, but the link is alive.
         store.set({ conn: true, lastSync: o.now() });
       } else {
-        store.set({ state: d, conn: true, lastSync: o.now() });
+        store.set({ state: d, conn: true, lastSync: o.now(), stateAt: o.now() });
         if (d.ring == null) { o.onNoRing(); return; }
       }
       schedule(interval(store.get().state));
@@ -70,7 +76,7 @@ export function createRingPoller(o: {
       gen++;
       if (timer != null) o.clearTimer(timer);
       timer = null;
-      store.set({ state: null, conn: true, lastSync: 0 });
+      store.set({ state: null, conn: true, lastSync: 0, stateAt: 0 });
     },
   };
 }

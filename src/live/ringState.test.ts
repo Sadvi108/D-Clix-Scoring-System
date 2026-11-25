@@ -154,3 +154,13 @@ test('pollNow() after stop() polls again even while the old request is still in 
   assert.equal(m.poller.store.get().state?.version, 2);
   assert.deepEqual(m.timers, [3000]);
 });
+
+test('stateAt moves only when a full state arrives', async () => {
+  const s = setup({ replies: [state(), { changed: false, version: 5, ring: 'A' }] });
+  await s.poller.pollNow();
+  assert.equal(s.poller.store.get().stateAt, 1000);
+  s.tick(4000);
+  await s.run();
+  assert.equal(s.poller.store.get().stateAt, 1000);
+  assert.equal(s.poller.store.get().lastSync, 5000);
+});
