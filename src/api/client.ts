@@ -50,28 +50,41 @@ export function createClient(cfg: ClientConfig): Request {
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs ?? 15000);
-    let res: { status: number; json(): Promise<unknown> };
+    // The timer covers the whole exchange, body included. Racing the abort also frees a body
+    // reader that ignores the signal.
+    const aborted = new Promise<never>((_, reject) => {
+      ctrl.signal.addEventListener('abort', () => reject(new ApiError('OFFLINE', 'No connection to the scoring server')));
+    });
+    aborted.catch(() => {});
+    const offline = () => new ApiError('OFFLINE', 'No connection to the scoring server');
     try {
-      res = await cfg.fetch(cfg.baseUrl().replace(/\/+$/, '') + path, {
-        method: wire,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: ctrl.signal,
-      });
-    } catch {
-      throw new ApiError('OFFLINE', 'No connection to the scoring server');
+      let res: { status: number; json(): Promise<unknown> };
+      try {
+        res = await Promise.race([
+          cfg.fetch(cfg.baseUrl().replace(/\/+$/, '') + path, {
+            method: wire,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+            signal: ctrl.signal,
+          }),
+          aborted,
+        ]);
+      } catch {
+        throw offline();
+      }
+
+      let json: Envelope<T> | null = null;
+      try {
+        json = (await Promise.race([res.json(), aborted])) as Envelope<T>;
+      } catch {
+        if (ctrl.signal.aborted) throw offline();
+        json = null;
+      }
+      if (json && json.ok) return json.data as T;
+      const e = json?.error;
+      throw new ApiError(e?.code ?? 'SERVER_ERROR', e?.message ?? `Server error (${res.status})`, res.status, e?.params ?? {});
     } finally {
       clearTimeout(timer);
     }
-
-    let json: Envelope<T> | null = null;
-    try {
-      json = (await res.json()) as Envelope<T>;
-    } catch {
-      json = null;
-    }
-    if (json && json.ok) return json.data as T;
-    const e = json?.error;
-    throw new ApiError(e?.code ?? 'SERVER_ERROR', e?.message ?? `Server error (${res.status})`, res.status, e?.params ?? {});
   };
 }

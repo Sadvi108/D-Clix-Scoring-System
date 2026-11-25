@@ -78,3 +78,34 @@ test('a reply that is not JSON becomes SERVER_ERROR with the status', async () =
   const f = fakeFetch({ status: 502, badJson: true });
   await assert.rejects(client(f.fetch)('GET', '/me'), (e: unknown) => e instanceof ApiError && e.code === 'SERVER_ERROR' && e.http === 502);
 });
+
+test('a request that never answers times out as OFFLINE', async () => {
+  const hang: FetchLike = (_url, init) => new Promise((_res, rej) => {
+    init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+  });
+  const t0 = Date.now();
+  await assert.rejects(
+    createClient({ fetch: hang, baseUrl: () => 'http://x', token: () => null, lang: () => 'en', appVersion: '1', timeoutMs: 20 })('GET', '/me'),
+    (e: unknown) => e instanceof ApiError && e.code === 'OFFLINE',
+  );
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test('the timeout also covers reading the body', async () => {
+  const slowBody: FetchLike = async (_url, init) => ({
+    status: 200,
+    json: () => new Promise((_res, rej) => {
+      init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+    }),
+  });
+  await assert.rejects(
+    createClient({ fetch: slowBody, baseUrl: () => 'http://x', token: () => null, lang: () => 'en', appVersion: '1', timeoutMs: 20 })('GET', '/me'),
+    (e: unknown) => e instanceof ApiError && e.code === 'OFFLINE',
+  );
+  // even a body reader that ignores the signal cannot hang the request
+  const deaf: FetchLike = async () => ({ status: 200, json: () => new Promise(() => {}) });
+  await assert.rejects(
+    createClient({ fetch: deaf, baseUrl: () => 'http://x', token: () => null, lang: () => 'en', appVersion: '1', timeoutMs: 20 })('GET', '/me'),
+    (e: unknown) => e instanceof ApiError && e.code === 'OFFLINE',
+  );
+});

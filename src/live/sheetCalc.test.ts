@@ -51,3 +51,15 @@ test('missingItems counts unset items of both sections for every athlete', () =>
   assert.equal(missingItems(freestyle, [{ ded: {}, items: { T1: 1 } }, { ded: {}, items: {} }]), 7);
   assert.equal(missingItems(recognized, [{ ded: {}, items: { P1: 1, P2: 1, P3: 1 } }]), 0);
 });
+
+test('a sheet with fewer than 2 sections is treated as empty instead of throwing', () => {
+  const one = { ...recognized, sections: [recognized.sections[0]] } as unknown as Sheet;
+  const r = calc(one, { ded: { ACC_01: 1 }, items: {} });
+  assert.deepEqual({ acc: r.acc, pres: r.pres, ok: r.ok }, { acc: 3.9, pres: 0, ok: true });
+  assert.equal(missingItems(one, [{ ded: {}, items: {} }]), 0);
+
+  const none = { ...recognized, sections: [] } as unknown as Sheet;
+  const z = calc(none, { ded: {}, items: {} });
+  assert.deepEqual({ acc: z.acc, pres: z.pres, tot: z.tot, ok: z.ok }, { acc: 0, pres: 0, tot: 0, ok: true });
+  assert.equal(missingItems(none, [{ ded: {}, items: {} }]), 0);
+});

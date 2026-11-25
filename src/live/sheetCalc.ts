@@ -1,6 +1,6 @@
 // Provisional figures on the judge screen, computed from the sheet the server sends (same rules
 // as the web app). The server recomputes everything on send; its figures are the official ones.
-import type { Sheet } from '../api/types';
+import type { Sheet, SheetFirstSection, SheetPresSection } from '../api/types';
 
 /** What the judge has tapped for one athlete: count per deduction key, value per item. */
 export interface Local { ded: Record<string, number>; items: Record<string, number> }
@@ -20,10 +20,16 @@ export interface Calc {
   presSum: number;
 }
 
+// A malformed sheet with fewer than two sections counts the missing ones as empty.
+function sections(sheet: Sheet): [SheetFirstSection, SheetPresSection] {
+  const s = sheet.sections as Partial<[SheetFirstSection, SheetPresSection]> | undefined;
+  return [s?.[0] ?? { label: '', max: 0, keys: [] }, s?.[1] ?? { label: '', items: [] }];
+}
+
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
 export function calc(sheet: Sheet, L: Local): Calc {
-  const [first, presSec] = sheet.sections;
+  const [first, presSec] = sections(sheet);
   const tech = first.items ?? [];
   const dec = sheet.total.decimals ?? 1;
   let dA = 0;
@@ -33,7 +39,7 @@ export function calc(sheet: Sheet, L: Local): Calc {
   let presSum = 0;
   let ok = true;
 
-  for (const k of first.keys) {
+  for (const k of first.keys ?? []) {
     const d = (L.ded[k.code] ?? 0) * Math.abs(k.value);
     if (k.target === 'PRESENTATION') dP += d;
     else if (k.target === 'TOTAL') dT += d;
@@ -60,6 +66,7 @@ export function calc(sheet: Sheet, L: Local): Calc {
 
 /** Number of items still unset across all athletes of the game. */
 export function missingItems(sheet: Sheet, locals: Local[]): number {
-  const all = [...(sheet.sections[0].items ?? []), ...sheet.sections[1].items];
+  const [first, presSec] = sections(sheet);
+  const all = [...(first.items ?? []), ...presSec.items];
   return locals.reduce((n, L) => n + all.filter((i) => L.items[i.code] == null).length, 0);
 }

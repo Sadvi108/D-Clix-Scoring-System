@@ -16,7 +16,11 @@ export function createTexts(o: { api: Pick<Endpoints, 'languages' | 'texts'>; kv
 
   async function fetchLang(lang: string): Promise<Record<string, string>> {
     const raw = await o.kv.get(cacheKey(lang));
-    const cached = raw ? (JSON.parse(raw) as { version: number; texts: Record<string, string> }) : null;
+    let cached: { version: number; texts: Record<string, string> } | null = null;
+    try {
+      const p = raw ? (JSON.parse(raw) as { version: number; texts: Record<string, string> } | null) : null;
+      if (p && typeof p === 'object' && p.texts && typeof p.texts === 'object') cached = p;
+    } catch { /* corrupt cache: fetch fresh */ }
     try {
       const d = await o.api.texts(lang, cached?.version);
       if (d.changed && d.texts) {
