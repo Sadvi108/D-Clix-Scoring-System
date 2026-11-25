@@ -14,6 +14,8 @@ export interface OutboxJob {
   scores: ScoreEntry[];
   clientTime: string;
   tries: number;
+  /** The official who scored it; a job is only sent while that official is signed in. */
+  officialId?: number;
 }
 export type OutboxEvent =
   | { kind: 'sent'; job: OutboxJob; receipt: Receipt }
@@ -34,7 +36,10 @@ export function createOutbox(o: {
   uuid: () => string;
   now: () => Date;
   onEvent: (e: OutboxEvent) => void;
+  /** False keeps a job queued (signed out, or another official signed in). Default: always. */
+  canSend?: (job: OutboxJob) => boolean;
 }) {
+  const canSend = o.canSend ?? (() => true);
   const store = createStore<{ jobs: OutboxJob[]; sending: boolean }>({ jobs: [], sending: false });
 
   const persist = () => o.kv.set(KEY, JSON.stringify(store.get().jobs));
@@ -72,6 +77,7 @@ export function createOutbox(o: {
   /** One pass over the queue. Returns true when it stopped on a retryable failure. */
   async function pass(): Promise<boolean> {
     for (const job of [...store.get().jobs]) {
+      if (!canSend(job)) continue;
       let receipt: Receipt;
       try {
         receipt = await o.send(job, job.tries > 0);
@@ -111,7 +117,7 @@ export function createOutbox(o: {
     }
   }
 
-  async function add(input: { ring: string; gameId: string; formNo: number; scores: ScoreEntry[] }) {
+  async function add(input: { ring: string; gameId: string; formNo: number; scores: ScoreEntry[]; officialId?: number }) {
     if (loading) await loading;
     const job: OutboxJob = { ...input, id: o.uuid(), clientTime: o.now().toISOString(), tries: 0 };
     store.set((s) => ({ jobs: [...s.jobs, job] }));

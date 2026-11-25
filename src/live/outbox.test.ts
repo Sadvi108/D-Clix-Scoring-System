@@ -196,3 +196,25 @@ test('load: stored entries that are not job objects are dropped', async () => {
   await s.outbox.flush();
   assert.equal(s.outbox.store.get().jobs.length, 0);
 });
+
+test('canSend false keeps a job queued without sending; the others still go, in order', async () => {
+  const sends: string[] = [];
+  let allowed = false;
+  let n = 0;
+  const outbox = createOutbox({
+    kv: memoryKV(),
+    send: async (j: OutboxJob) => { sends.push(j.id); return receipt(); },
+    uuid: () => `id-${++n}`,
+    now: () => new Date('2026-11-25T08:00:00Z'),
+    onEvent: () => {},
+    canSend: (j) => allowed || j.officialId === 7,
+  });
+  await outbox.add({ ...job, officialId: 5 });
+  await outbox.add({ ...job, officialId: 7 });
+  assert.deepEqual(sends, ['id-2']);
+  assert.deepEqual(outbox.store.get().jobs.map((j) => [j.id, j.officialId, j.tries]), [['id-1', 5, 0]]);
+  allowed = true;
+  await outbox.flush();
+  assert.deepEqual(sends, ['id-2', 'id-1']);
+  assert.equal(outbox.count(), 0);
+});
