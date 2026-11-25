@@ -3,15 +3,16 @@
 import { StatusBar } from 'expo-status-bar';
 import { Redirect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@/api/client';
 import type { Rings } from '@/api/types';
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
-import { api, session, texts, useSession } from '@/live';
+import { afterClaim, api, session, texts, useSession } from '@/live';
 import { homeFor } from '@/live/routes';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
+import { confirm } from '@/ui/confirm';
 import { Button, Icon, RuleBadge, Txt } from '@/ui/primitives';
 
 const ROLE_KEY = { JUDGE: ['role_JUDGE', 'Judge'], OPERATOR: ['role_OPERATOR', 'Ring operator'], CHIEF: ['role_CHIEF', 'Chief referee'] } as const;
@@ -40,6 +41,13 @@ export default function RingsScreen() {
     return () => { live = false; };
   }, []);
 
+  if (sess.status === 'booting') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.ground }}>
+        <ActivityIndicator color={c.gold} />
+      </View>
+    );
+  }
   if (sess.status === 'signedOut' || !sess.profile) return <Redirect href="/sign-in" />;
   const p = sess.profile;
   const where = (r: string, s?: number | null) => `${t('ring', 'Ring')} ${r}${s ? ` · J${s}` : ''}`;
@@ -49,6 +57,7 @@ export default function RingsScreen() {
     setBusy(k); setErr(null);
     try {
       const prof = await session.claim(ring, seat);
+      afterClaim();
       router.replace(homeFor(prof));
     } catch (e) {
       if (!session.handleError(e)) setErr(e instanceof ApiError ? e.message : String(e));
@@ -58,21 +67,27 @@ export default function RingsScreen() {
     }
   }
 
-  function ask(ring: string, seat?: number) {
+  async function ask(ring: string, seat?: number) {
     const same = p.ring && p.ring.toUpperCase() === ring.toUpperCase() && ((p.seat == null && !seat) || (seat != null && p.seat === seat));
     if (!p.ring || same) { void claim(ring, seat); return; }
-    Alert.alert(
-      t('wl_chg_q', 'Change ring?'),
-      t('wl_chg_text', 'Move from {from} to {to}?', { from: where(p.ring, p.seat), to: where(ring, seat) }),
-      [{ text: t('cancel', 'Cancel'), style: 'cancel' }, { text: t('wl_chg_ok', 'Move'), onPress: () => { void claim(ring, seat); } }],
-    );
+    const yes = await confirm({
+      title: t('wl_chg_q', 'Change ring?'),
+      message: t('wl_chg_text', 'Move from {from} to {to}?', { from: where(p.ring, p.seat), to: where(ring, seat) }),
+      ok: t('wl_chg_ok', 'Move'),
+      cancel: t('cancel', 'Cancel'),
+    });
+    if (yes) void claim(ring, seat);
   }
 
-  function signOut() {
-    Alert.alert(t('wl_so_q', 'Sign out?'), t('wl_so_text', 'You will need your PIN to sign in again.'), [
-      { text: t('cancel', 'Cancel'), style: 'cancel' },
-      { text: t('sign_out', 'Sign out'), style: 'destructive', onPress: () => { void session.logout().then(() => router.replace('/sign-in')); } },
-    ]);
+  async function signOut() {
+    const yes = await confirm({
+      title: t('wl_so_q', 'Sign out?'),
+      message: t('wl_so_text', 'You will need your PIN to sign in again.'),
+      ok: t('sign_out', 'Sign out'),
+      cancel: t('cancel', 'Cancel'),
+      destructive: true,
+    });
+    if (yes) { await session.logout(); router.replace('/sign-in'); }
   }
 
   return (
@@ -83,7 +98,7 @@ export default function RingsScreen() {
           <Txt v="title" style={{ fontSize: wide ? 24 : 20 }}>{t('wl_choose_ring', 'Choose your ring')}</Txt>
           <Txt v="caption" color="inkMuted" numberOfLines={1}>{p.name} · {t(ROLE_KEY[p.role][0], ROLE_KEY[p.role][1])} · {p.tournament.name}</Txt>
         </View>
-        <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={signOut} />
+        <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={() => { void signOut(); }} />
       </View>
       <ScrollView contentContainerStyle={[styles.body, { paddingHorizontal: wide ? space[6] : space[4] }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
@@ -111,7 +126,7 @@ export default function RingsScreen() {
                       const taken = s.taken && !s.mine;
                       const loading = busy === `${g.ring}-${s.seat}`;
                       return (
-                        <Pressable key={s.seat} disabled={taken || !!busy} onPress={() => ask(g.ring, s.seat)}
+                        <Pressable key={s.seat} disabled={taken || !!busy} onPress={() => { void ask(g.ring, s.seat); }}
                           accessibilityRole="radio" accessibilityState={{ checked: s.mine, disabled: taken }}
                           accessibilityLabel={`J${s.seat}${taken ? ', taken' : s.mine ? ', your seat' : ', free'}`}
                           style={({ pressed }) => [styles.seat, {
@@ -127,7 +142,7 @@ export default function RingsScreen() {
                   </View>
                 ) : (
                   <Button label={busy === `${g.ring}-` ? '…' : p.role === 'OPERATOR' ? t('wl_run_ring', 'Run this ring') : t('wl_open_ring', 'Open this ring')}
-                    icon="chevron" variant={mine ? 'primary' : 'secondary'} size="lg" block disabled={!!busy} onPress={() => ask(g.ring)} />
+                    icon="chevron" variant={mine ? 'primary' : 'secondary'} size="lg" block disabled={!!busy} onPress={() => { void ask(g.ring); }} />
                 )}
               </View>
             );

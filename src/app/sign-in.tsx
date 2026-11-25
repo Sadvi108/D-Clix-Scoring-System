@@ -2,9 +2,9 @@
 // backspace, 0 and Sign in on the last row, and a language button. One 6-digit PIN for every
 // official; the PIN decides the role (judge, ring operator or chief referee), then the ring.
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeypadCapture } from '@/device/keypad';
@@ -12,6 +12,7 @@ import { useFreeOrientation } from '@/hooks/useFreeOrientation';
 import { session, texts, useSession, useTexts } from '@/live';
 import { homeFor } from '@/live/routes';
 import { fonts, radius, space } from '@/theme/tokens';
+import { confirm } from '@/ui/confirm';
 import { Icon, Txt } from '@/ui/primitives';
 
 const LENGTH = 6;
@@ -59,14 +60,13 @@ export default function SignIn() {
     const r = await session.login(p, confirmReplace);
     setBusy(false);
     if (r.kind === 'takeover') {
-      Alert.alert(
-        t('wl_already_title', 'Already signed in'),
-        t('wl_already_text', 'This account is signed in on {device}. Sign in here and sign that device out?', { device: r.deviceLabel }),
-        [
-          { text: t('cancel', 'Cancel'), style: 'cancel', onPress: () => setPin('') },
-          { text: t('wl_takeover', 'Sign in here'), onPress: () => { void signIn(p, true); } },
-        ],
-      );
+      const yes = await confirm({
+        title: t('wl_already_title', 'Already signed in'),
+        message: t('wl_already_text', 'This account is signed in on {device}. Sign in here and sign that device out?', { device: r.deviceLabel }),
+        ok: t('wl_takeover', 'Sign in here'),
+        cancel: t('cancel', 'Cancel'),
+      });
+      if (yes) void signIn(p, true); else setPin('');
       return;
     }
     if (r.kind === 'error') {
@@ -99,6 +99,8 @@ export default function SignIn() {
         : <Txt style={{ fontFamily: opts.primary ? fonts.sansBold : fonts.display, fontSize: opts.primary ? 20 : 30, lineHeight: opts.primary ? 26 : 34, color: opts.primary ? N.onGold : N.ink }}>{label}</Txt>}
     </Pressable>
   );
+
+  if (sess.status === 'signedIn' && sess.profile) return <Redirect href={homeFor(sess.profile)} />;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: N.ground }}>

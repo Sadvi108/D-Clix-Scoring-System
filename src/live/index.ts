@@ -17,7 +17,7 @@ import { uuid } from './uuid';
 /** UAT server; a tablet can change it on the Device connection screen. */
 export const UAT_URL = 'https://www.maclubsystem.com/Competitionuat/api/v1';
 export const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
-const PLATFORM: DeviceInfo['platform'] = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'web' ? 'web' : 'android';
+export const PLATFORM: DeviceInfo['platform'] = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'web' ? 'web' : 'android';
 
 export const baseUrl = () => getDeviceSettings().serverUrl || process.env.EXPO_PUBLIC_API_URL || UAT_URL;
 
@@ -58,10 +58,21 @@ export const outbox = createOutbox({
   onEvent: (e) => {
     outboxNotice.set({ last: e });
   },
+  canSend: (job) => {
+    const s = session.store.get();
+    return s.status === 'signedIn' && !!s.token && (job.officialId == null || job.officialId === s.profile?.officialId);
+  },
 });
 
 /** Asked by the poller when the server has no ring for this token. */
 export const ringNeeded = createStore<{ needed: boolean }>({ needed: false });
+
+/** After a successful claim: the poll key may be unchanged, so reset and poll at once. */
+export function afterClaim() {
+  ringNeeded.set({ needed: false });
+  poller.stop();
+  void poller.pollNow();
+}
 
 export const poller = createRingPoller({
   api,
@@ -85,7 +96,11 @@ export function startLive() {
   // Poll while an official holds a ring; stop when signed out or ring-less.
   // Subscribe before boot() so the first signed-in state starts the poller.
   let pollingFor = '';
+  let wasSignedIn = false;
   session.store.subscribe(() => {
+    const signedIn = session.store.get().status === 'signedIn';
+    if (signedIn && !wasSignedIn && outbox.count()) void outbox.flush();
+    wasSignedIn = signedIn;
     const p = session.store.get().profile;
     const key = session.store.get().status === 'signedIn' && p?.ring ? `${p.officialId}|${p.ring}|${p.seat ?? ''}` : '';
     if (key === pollingFor) return;

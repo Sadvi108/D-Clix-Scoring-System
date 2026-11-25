@@ -4,12 +4,13 @@
 import { Redirect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
 import { session, texts, useLive, useOutbox, useRingNeeded, useSession } from '@/live';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
+import { confirm } from '@/ui/confirm';
 import { Button, Txt } from '@/ui/primitives';
 
 const hms = (ms: number) => (ms ? new Date(ms).toTimeString().slice(0, 8) : '—');
@@ -25,7 +26,25 @@ export default function RingStatus() {
   const t = texts.t;
 
   useEffect(() => { if (need.needed) router.replace('/rings'); }, [need.needed, router]);
+  if (sess.status === 'booting') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.ground }}>
+        <ActivityIndicator color={c.gold} />
+      </View>
+    );
+  }
   if (sess.status === 'signedOut' || !sess.profile) return <Redirect href="/sign-in" />;
+
+  async function signOut() {
+    const yes = await confirm({
+      title: t('wl_so_q', 'Sign out?'),
+      message: t('wl_so_text', 'You will need your PIN to sign in again.'),
+      ok: t('sign_out', 'Sign out'),
+      cancel: t('cancel', 'Cancel'),
+      destructive: true,
+    });
+    if (yes) { await session.logout(); router.replace('/sign-in'); }
+  }
 
   const p = sess.profile;
   const st = live.state;
@@ -42,7 +61,7 @@ export default function RingStatus() {
           <View style={[styles.dot, { backgroundColor: live.conn ? c.ok : c.alert }]} />
           <Txt v="title" style={{ flex: 1 }}>{t('ring', 'Ring')} {p.ring} {p.seat ? `· J${p.seat}` : ''}</Txt>
           <Button label={t('wl_ring_seat', 'Ring / seat')} variant="secondary" onPress={() => router.push('/rings')} />
-          <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={() => { void session.logout().then(() => router.replace('/sign-in')); }} />
+          <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={() => { void signOut(); }} />
         </View>
         <Txt v="caption" color={live.conn ? 'inkMuted' : 'alertText'}>
           {live.conn ? t('hb_online', 'Online') : t('offline_banner_staff', 'Offline')} · {t('last_sync', 'Last sync')} {hms(live.lastSync)}
