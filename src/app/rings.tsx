@@ -1,120 +1,138 @@
-// Start · Choose your ring.
-//   Judge: every ring with its seats J1–J5; tap a free seat to sit there.
-//   Ring operator / chief referee: every ring with "Open this ring".
+// Choose your ring (GET /rings). Judges tap a free seat; operator and chief open a ring.
+// Leaving a ring or seat already held asks first, so a stray tap never moves anyone.
 import { StatusBar } from 'expo-status-bar';
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { AccountRole, RingInfo } from '@/core/types';
-import { api, useScoring } from '@/data';
-import { ROLE_HOME, ROLE_LABEL, ROLE_PARAM, roleFromParam } from '@/features/session/session';
+import { ApiError } from '@/api/client';
+import type { Rings } from '@/api/types';
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
+import { api, session, texts, useSession } from '@/live';
+import { homeFor } from '@/live/routes';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { Button, Icon, RuleBadge, Txt } from '@/ui/primitives';
 
-export default function Rings() {
+const ROLE_KEY = { JUDGE: ['role_JUDGE', 'Judge'], OPERATOR: ['role_OPERATOR', 'Ring operator'], CHIEF: ['role_CHIEF', 'Chief referee'] } as const;
+
+export default function RingsScreen() {
   useFreeOrientation();
   const router = useRouter();
   const { c } = useTheme();
-  const s = useScoring();
-  const { as } = useLocalSearchParams<{ as?: string }>();
+  const sess = useSession();
+  const t = texts.t;
   const { width } = useWindowDimensions();
   const wide = width >= 700;
+  const [rings, setRings] = useState<Rings | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const role: AccountRole | null = roleFromParam(as) ?? s.accounts.at(-1)?.role ?? null;
-  const acc = role ? s.accounts.find((a) => a.role === role) : null;
-  if (!role || !acc) return <Redirect href={{ pathname: '/sign-in', params: role ? { next: ROLE_PARAM[role] } : {} }} />;
-  // The chief referee watches every ring: All rings has the live state and "Open this ring".
-  if (role === 'CHIEF') return <Redirect href="/chief" />;
+  const load = useCallback(async () => {
+    try { const r = await api.rings(); setRings(r); setErr(null); } catch (e) { if (!session.handleError(e)) setErr(e instanceof ApiError ? e.message : String(e)); }
+  }, []);
+  useEffect(() => {
+    let live = true;
+    api.rings().then(
+      (r) => { if (live) { setRings(r); setErr(null); } },
+      (e) => { if (live && !session.handleError(e)) setErr(e instanceof ApiError ? e.message : String(e)); },
+    );
+    return () => { live = false; };
+  }, []);
 
-  async function seat(ring: RingInfo, judgeNo: number) {
-    setBusy(`${ring.id}-${judgeNo}`); setErr(null);
-    const r = await api.takeSeat(ring.id, judgeNo);
-    setBusy(null);
-    if (r.ok) router.replace('/judge'); else setErr(r.error);
-  }
-  async function open(ring: RingInfo) {
-    setBusy(ring.id); setErr(null);
-    const r = await api.chooseRing(ring.id);
-    setBusy(null);
-    if (r.ok) router.replace(ROLE_HOME[role!]); else setErr(r.error);
+  if (sess.status === 'signedOut' || !sess.profile) return <Redirect href="/sign-in" />;
+  const p = sess.profile;
+  const where = (r: string, s?: number | null) => `${t('ring', 'Ring')} ${r}${s ? ` · J${s}` : ''}`;
+
+  async function claim(ring: string, seat?: number) {
+    const k = `${ring}-${seat ?? ''}`;
+    setBusy(k); setErr(null);
+    try {
+      const prof = await session.claim(ring, seat);
+      router.replace(homeFor(prof));
+    } catch (e) {
+      if (!session.handleError(e)) setErr(e instanceof ApiError ? e.message : String(e));
+      void load();
+    } finally {
+      setBusy(null);
+    }
   }
 
-  const live = (ring: RingInfo) => {
-    // Demo: the sample games run on whichever ring is open on this device.
-    const cur = ring.id === s.ring.id ? s.current : null;
-    if (!cur) return null;
-    return `Game ${cur.matchNo} · ${cur.hong ? `${cur.chung.name} vs ${cur.hong.name}` : cur.chung.name}`;
-  };
+  function ask(ring: string, seat?: number) {
+    const same = p.ring && p.ring.toUpperCase() === ring.toUpperCase() && ((p.seat == null && !seat) || (seat != null && p.seat === seat));
+    if (!p.ring || same) { void claim(ring, seat); return; }
+    Alert.alert(
+      t('wl_chg_q', 'Change ring?'),
+      t('wl_chg_text', 'Move from {from} to {to}?', { from: where(p.ring, p.seat), to: where(ring, seat) }),
+      [{ text: t('cancel', 'Cancel'), style: 'cancel' }, { text: t('wl_chg_ok', 'Move'), onPress: () => { void claim(ring, seat); } }],
+    );
+  }
+
+  function signOut() {
+    Alert.alert(t('wl_so_q', 'Sign out?'), t('wl_so_text', 'You will need your PIN to sign in again.'), [
+      { text: t('cancel', 'Cancel'), style: 'cancel' },
+      { text: t('sign_out', 'Sign out'), style: 'destructive', onPress: () => { void session.logout().then(() => router.replace('/sign-in')); } },
+    ]);
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }}>
       <StatusBar style="light" />
       <View style={[styles.top, { borderBottomColor: c.hairline, paddingHorizontal: wide ? space[6] : space[4] }]}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt v="title" style={{ fontSize: wide ? 24 : 20 }}>Choose your ring</Txt>
-          <Txt v="caption" color="inkMuted" numberOfLines={1}>{acc.name} · {ROLE_LABEL[role]}</Txt>
+          <Txt v="title" style={{ fontSize: wide ? 24 : 20 }}>{t('wl_choose_ring', 'Choose your ring')}</Txt>
+          <Txt v="caption" color="inkMuted" numberOfLines={1}>{p.name} · {t(ROLE_KEY[p.role][0], ROLE_KEY[p.role][1])} · {p.tournament.name}</Txt>
         </View>
-        <Button label="Sign out" icon="signout" variant="secondary" onPress={() => { api.signOut(role); router.replace('/sign-in'); }} />
+        <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={signOut} />
       </View>
-      <ScrollView contentContainerStyle={[styles.body, { paddingHorizontal: wide ? space[6] : space[4] }]}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingHorizontal: wide ? space[6] : space[4] }]}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
         {err ? (
           <View style={[styles.err, { backgroundColor: c.alertSoft, borderColor: c.alert }]} accessibilityRole="alert">
             <Icon name="alert" size={18} color={c.alertText} />
             <Txt v="body" color="alertText" style={{ flex: 1 }}>{err}</Txt>
+            <Button label={t('wl_retry', 'Try again')} variant="secondary" onPress={() => { void load(); }} />
           </View>
         ) : null}
+        {!rings ? <Txt v="body" color="inkMuted">{t('wl_loading_rings', 'Loading rings…')}</Txt> : null}
+        {rings && !rings.rings.length ? <Txt v="body" color="inkMuted">{t('wl_no_rings', 'No rings are scheduled for {date}.', { date: rings.date })}</Txt> : null}
         <View style={[styles.grid, { flexDirection: wide ? 'row' : 'column' }]}>
-          {s.rings.map((ring) => {
-            const mineHere = role === 'JUDGE' && s.me && s.ring.id === ring.id;
-            const now = live(ring);
+          {rings?.rings.map((g) => {
+            const mine = p.ring?.toUpperCase() === g.ring.toUpperCase();
             return (
-              <View key={ring.id} style={[styles.ring, { backgroundColor: c.surface, borderColor: mineHere || (role !== 'JUDGE' && s.ring.id === ring.id) ? c.gold : c.hairline }, wide && { flexBasis: '31%', flexGrow: 1 }]}>
+              <View key={g.ring} style={[styles.ring, { backgroundColor: c.surface, borderColor: mine ? c.gold : c.hairline }, wide && { flexBasis: '31%', flexGrow: 1 }]}>
                 <View style={styles.head}>
-                  <Txt v="title" style={{ fontSize: 22 }}>{ring.name}</Txt>
-                  <RuleBadge tone={ring.operatorIn ? 'approved' : 'unconfigured'} label={ring.operatorIn ? 'Operator in' : 'No operator'} />
+                  <Txt v="title" style={{ fontSize: 22 }}>{t('ring', 'Ring')} {g.ring}</Txt>
+                  <RuleBadge tone={g.operatorTaken ? 'approved' : 'unconfigured'} label={g.operatorTaken ? t('wl_op_in', 'Operator in') : t('wl_op_none', 'No operator')} />
                 </View>
-                <Txt v="caption" color="inkMuted" numberOfLines={1}>{now ?? 'No game on the mat'}</Txt>
-
-                {role === 'JUDGE' ? (
-                  <>
-                    <View style={styles.seats} accessibilityRole="radiogroup" accessibilityLabel={`${ring.name} seats`}>
-                      {ring.seats.map((st) => {
-                        const mine = st.takenBy === acc.name;
-                        const taken = !!st.takenBy && !mine;
-                        const loading = busy === `${ring.id}-${st.judgeNo}`;
-                        return (
-                          <Pressable key={st.judgeNo} disabled={taken || !!busy} onPress={() => seat(ring, st.judgeNo)}
-                            accessibilityRole="radio" accessibilityState={{ checked: mine, disabled: taken }}
-                            accessibilityLabel={`Seat J${st.judgeNo}${taken ? `, taken by ${st.takenBy}` : mine ? ', your seat' : ', free'}`}
-                            style={({ pressed }) => [styles.seat, {
-                              backgroundColor: mine ? c.gold : taken ? 'transparent' : pressed ? c.surfaceSunken : c.surfaceRaised,
-                              borderColor: mine ? c.gold : taken ? c.hairline : c.controlBorder,
-                              borderStyle: taken ? 'dashed' : 'solid',
-                            }]}>
-                            <Txt v="scoreMd" color={mine ? 'onGold' : taken ? 'inkMuted' : 'ink'} style={{ fontSize: 22 }}>{loading ? '…' : `J${st.judgeNo}`}</Txt>
-                            <Txt v="caption" color={mine ? 'onGold' : 'inkMuted'} numberOfLines={1} style={{ fontSize: 10 }}>
-                              {mine ? 'You' : taken ? st.takenBy!.split(' ')[0] : 'Free'}
-                            </Txt>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Txt v="caption" color="inkMuted">Tap a free seat. Your scores go to {ring.name} as that judge number.</Txt>
-                  </>
+                {p.role === 'JUDGE' ? (
+                  <View style={styles.seats} accessibilityRole="radiogroup" accessibilityLabel={`${t('ring', 'Ring')} ${g.ring}`}>
+                    {g.seats.filter((s) => s.used).map((s) => {
+                      const taken = s.taken && !s.mine;
+                      const loading = busy === `${g.ring}-${s.seat}`;
+                      return (
+                        <Pressable key={s.seat} disabled={taken || !!busy} onPress={() => ask(g.ring, s.seat)}
+                          accessibilityRole="radio" accessibilityState={{ checked: s.mine, disabled: taken }}
+                          accessibilityLabel={`J${s.seat}${taken ? ', taken' : s.mine ? ', your seat' : ', free'}`}
+                          style={({ pressed }) => [styles.seat, {
+                            backgroundColor: s.mine ? c.gold : taken ? 'transparent' : pressed ? c.surfaceSunken : c.surfaceRaised,
+                            borderColor: s.mine ? c.gold : taken ? c.hairline : c.controlBorder,
+                            borderStyle: taken ? 'dashed' : 'solid',
+                          }]}>
+                          <Txt v="scoreMd" color={s.mine ? 'onGold' : taken ? 'inkMuted' : 'ink'} style={{ fontSize: 22 }}>{loading ? '…' : `J${s.seat}`}</Txt>
+                          <Txt v="caption" color={s.mine ? 'onGold' : 'inkMuted'} style={{ fontSize: 10 }}>{s.mine ? t('wl_you', 'You') : taken ? t('wl_taken', 'Taken') : t('wl_free', 'Free')}</Txt>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 ) : (
-                  <Button label={busy === ring.id ? 'Opening…' : s.ring.id === ring.id ? 'Open this ring · current' : 'Open this ring'} icon="chevron"
-                    variant={s.ring.id === ring.id ? 'primary' : 'secondary'} size="lg" block disabled={!!busy} onPress={() => open(ring)} />
+                  <Button label={busy === `${g.ring}-` ? '…' : p.role === 'OPERATOR' ? t('wl_run_ring', 'Run this ring') : t('wl_open_ring', 'Open this ring')}
+                    icon="chevron" variant={mine ? 'primary' : 'secondary'} size="lg" block disabled={!!busy} onPress={() => ask(g.ring)} />
                 )}
               </View>
             );
           })}
         </View>
-        <Txt v="caption" color="inkMuted" style={{ textAlign: 'center' }}>Demo: the sample games run on whichever ring you open.</Txt>
       </ScrollView>
     </SafeAreaView>
   );
@@ -127,6 +145,6 @@ const styles = StyleSheet.create({
   grid: { gap: space[4], flexWrap: 'wrap' },
   ring: { borderRadius: radius.lg, borderWidth: 1.5, padding: space[5], gap: space[3], minWidth: 0 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[2] },
-  seats: { flexDirection: 'row', gap: 8 },
-  seat: { flex: 1, minHeight: 64, borderRadius: radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
+  seats: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  seat: { flexGrow: 1, flexBasis: 56, minHeight: 64, borderRadius: radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
 });
