@@ -12,10 +12,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { loadDeviceSettings } from '@/device/settings';
+import { startLive } from '@/live';
 import { palettes } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
-loadDeviceSettings();
+// The saved server address must be known before the first API call.
+loadDeviceSettings().finally(startLive);
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

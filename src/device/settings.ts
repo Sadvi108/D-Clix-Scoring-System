@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 export type DeviceSettings = {
-  /** Scoring server on the venue network, e.g. http://192.168.1.10:8080. Empty = built-in demo data. */
+  /** Scoring server address, e.g. http://192.168.1.10:8080/api/v1. Empty = the UAT server. */
   serverUrl: string;
   /** Listen for a USB (or Bluetooth) keypad on the judge screens. */
   keypad: boolean;
