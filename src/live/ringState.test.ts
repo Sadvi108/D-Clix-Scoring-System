@@ -93,3 +93,64 @@ test('stop cancels the next poll and clears the state', async () => {
   s.poller.stop();
   assert.equal(s.poller.store.get().state, null);
 });
+
+test('a changed:false reply refreshes lastSync and never triggers onNoRing', async () => {
+  const s = setup({ replies: [state(), { changed: false, version: 5, ring: null }] });
+  await s.poller.pollNow();
+  assert.equal(s.poller.store.get().lastSync, 1000);
+  s.tick(5000);
+  await s.run();
+  assert.equal(s.poller.store.get().lastSync, 6000);
+  assert.equal(s.counts().noRing, 0);
+  assert.equal(s.poller.store.get().state?.ring, 'A');
+  assert.deepEqual(s.timers, [3000, 3000]);
+});
+
+function manual() {
+  const resolvers: ((r: RingState) => void)[] = [];
+  const timers: number[] = [];
+  let noRing = 0;
+  const poller = createRingPoller({
+    api: { ringState: () => new Promise<RingState>((res) => { resolvers.push(res); }) },
+    role: () => 'JUDGE',
+    unsent: () => 0,
+    onAuthError: () => true,
+    onNoRing: () => { noRing++; },
+    now: () => 1,
+    setTimer: (_fn, ms) => { timers.push(ms); return 1; },
+    clearTimer: () => {},
+  });
+  return { poller, resolvers, timers, noRing: () => noRing };
+}
+const flushMicro = () => new Promise((r) => setImmediate(r));
+
+test('a reply that arrives after stop() is ignored: no store write, no schedule', async () => {
+  const m = manual();
+  void m.poller.pollNow();
+  await flushMicro();
+  m.poller.stop();
+  m.resolvers[0](state({ ring: null }));
+  await flushMicro();
+  assert.equal(m.poller.store.get().state, null);
+  assert.equal(m.poller.store.get().lastSync, 0);
+  assert.deepEqual(m.timers, []);
+  assert.equal(m.noRing(), 0);
+});
+
+test('pollNow() after stop() polls again even while the old request is still in flight', async () => {
+  const m = manual();
+  void m.poller.pollNow();
+  await flushMicro();
+  m.poller.stop();
+  void m.poller.pollNow();
+  await flushMicro();
+  assert.equal(m.resolvers.length, 2);
+  // old reply lands first and is ignored; the new one counts
+  m.resolvers[0](state({ version: 1 }));
+  await flushMicro();
+  assert.equal(m.poller.store.get().state, null);
+  m.resolvers[1](state({ version: 2 }));
+  await flushMicro();
+  assert.equal(m.poller.store.get().state?.version, 2);
+  assert.deepEqual(m.timers, [3000]);
+});

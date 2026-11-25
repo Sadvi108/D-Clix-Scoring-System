@@ -20,8 +20,9 @@ export function createRingPoller(o: {
 }) {
   const store = createStore<LiveState>({ state: null, conn: true, lastSync: 0 });
   let timer: unknown = null;
-  let running = false;
-  let inFlight = false;
+  // Bumped by stop(): a request that started before a stop() must not touch the store or schedule.
+  let gen = 0;
+  let inFlightGen: number | null = null;
 
   function schedule(ms: number) {
     if (timer != null) o.clearTimer(timer);
@@ -34,29 +35,30 @@ export function createRingPoller(o: {
   }
 
   async function tick() {
-    if (inFlight) return;
-    inFlight = true;
-    running = true;
+    if (inFlightGen === gen) return;
+    const my = gen;
+    inFlightGen = my;
     const prev = store.get().state;
     const since = o.role() === 'JUDGE' && prev ? prev.version : null;
     try {
       const d = await o.api.ringState(since, o.unsent());
-      if (!running) return;
+      if (my !== gen) return;
       if (d.changed === false && prev) {
-        store.set({ conn: true });
+        // Nothing new, but the link is alive.
+        store.set({ conn: true, lastSync: o.now() });
       } else {
         store.set({ state: d, conn: true, lastSync: o.now() });
+        if (d.ring == null) { o.onNoRing(); return; }
       }
-      if (d.ring == null) { o.onNoRing(); return; }
       schedule(interval(store.get().state));
     } catch (e) {
-      if (!running) return;
+      if (my !== gen) return;
       if (e instanceof ApiError && e.code === 'OFFLINE') { store.set({ conn: false }); schedule(2000); return; }
       if (e instanceof ApiError && e.code === 'RING_NOT_CHOSEN') { o.onNoRing(); return; }
       if (o.onAuthError(e)) return;
       schedule(3000);
     } finally {
-      inFlight = false;
+      if (inFlightGen === my) inFlightGen = null;
     }
   }
 
@@ -65,7 +67,7 @@ export function createRingPoller(o: {
     /** Poll now and keep polling. */
     pollNow: () => tick(),
     stop() {
-      running = false;
+      gen++;
       if (timer != null) o.clearTimer(timer);
       timer = null;
       store.set({ state: null, conn: true, lastSync: 0 });
