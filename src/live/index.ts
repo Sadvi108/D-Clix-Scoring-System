@@ -3,8 +3,9 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { createClient, type FetchLike } from '@/api/client';
 import { makeEndpoints } from '@/api/endpoints';
-import type { DeviceInfo } from '@/api/types';
+import type { DeviceInfo, Sheet } from '@/api/types';
 import { getDeviceSettings } from '@/device/settings';
+import { createJudgeLocal } from './judgeLocal';
 import { asyncStorageKV } from './kvAsync';
 import { createOutbox, type OutboxEvent } from './outbox';
 import { createRingPoller } from './ringState';
@@ -85,6 +86,47 @@ export const poller = createRingPoller({
   clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 });
 
+/** The judge's taps; saved as a draft only while the form is open, not yet sent, and the link is up. */
+export const judgeLocal = createJudgeLocal({
+  save: (gameId, formNo, scores) => api.saveDraft(gameId, formNo, scores),
+  canSave: () => {
+    const live = poller.store.get();
+    const cur = live.state?.current;
+    return live.conn && !!cur?.scoringOpen && !cur.my?.sent;
+  },
+  setTimer: (fn, ms) => setTimeout(fn, ms),
+  clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+});
+
+/** Score sheets by ring|game|form|language: undefined = not asked, 'loading', null = failed (retried), or the sheet. */
+export const sheets = createStore<{ byKey: Record<string, Sheet | null | 'loading'> }>({ byKey: {} });
+
+export function sheetKey(gameId: string, formNo: number | null) {
+  return `${session.store.get().profile?.ring ?? ''}|${gameId}|${formNo ?? 0}|${texts.lang()}`;
+}
+
+export function loadSheet(gameId: string, formNo: number | null) {
+  const key = sheetKey(gameId, formNo);
+  if (sheets.get().byKey[key] !== undefined) return;
+  sheets.set((s) => ({ byKey: { ...s.byKey, [key]: 'loading' } }));
+  api.sheet(gameId, formNo).then(
+    (sheet) => sheets.set((s) => ({ byKey: { ...s.byKey, [key]: sheet } })),
+    (e) => {
+      session.handleError(e);
+      sheets.set((s) => ({ byKey: { ...s.byKey, [key]: null } }));
+    },
+  );
+}
+
+/** Forget a failed sheet so the next loadSheet asks again. */
+export function retrySheet(key: string) {
+  sheets.set((s) => {
+    const byKey = { ...s.byKey };
+    delete byKey[key];
+    return { byKey };
+  });
+}
+
 let started = false;
 /** Called once from the root layout. */
 export function startLive() {
@@ -105,6 +147,8 @@ export function startLive() {
     const key = session.store.get().status === 'signedIn' && p?.ring ? `${p.officialId}|${p.ring}|${p.seat ?? ''}` : '';
     if (key === pollingFor) return;
     pollingFor = key;
+    judgeLocal.clear();
+    sheets.set({ byKey: {} });
     poller.stop();
     if (key) { ringNeeded.set({ needed: false }); void poller.pollNow(); }
   });
