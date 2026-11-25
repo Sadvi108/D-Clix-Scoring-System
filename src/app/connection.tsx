@@ -4,11 +4,11 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { applyServerUrl } from '@/data';
 import { KEYPAD_MAP, KeypadCapture, keyToAction } from '@/device/keypad';
 import { useLink, useLinkPill } from '@/device/network';
 import { normaliseServerUrl, updateDeviceSettings, useDeviceSettings } from '@/device/settings';
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
+import { api, APP_VERSION, PLATFORM } from '@/live';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { KV, Notice } from '@/ui/console';
@@ -42,26 +42,23 @@ export default function Connection() {
     const u = normaliseServerUrl(url);
     setUrl(u);
     updateDeviceSettings({ serverUrl: u });
-    applyServerUrl(u);
     return u;
   }
 
   async function runTest() {
     const u = save();
-    if (!u) { setTest({ state: 'fail', text: 'Enter the scoring server address first, for example 192.168.1.10:8080.' }); return; }
+    if (!u) { setTest({ state: 'fail', text: 'Enter the scoring server address first, for example https://host/Competitionuat/api/v1.' }); return; }
     setTest({ state: 'testing' });
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 4000);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     try {
-      const res = await fetch(`${u}/poomsae/health`, { signal: ctl.signal });
-      setTest(res.ok
-        ? { state: 'ok', text: `Server answered in ${Date.now() - started} ms over ${link.kind === 'wired' ? 'the cable' : link.label}.` }
-        : { state: 'fail', text: `Server reached but answered ${res.status}. Check the address and port.` });
+      const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), 4000); });
+      await Promise.race([api.meta(PLATFORM, APP_VERSION), timeout]); // resolves only for an {ok:true} envelope
+      setTest({ state: 'ok', text: `Server answered in ${Date.now() - started} ms over ${link.kind === 'wired' ? 'the cable' : link.label}.` });
     } catch {
-      setTest({ state: 'fail', text: `No answer from ${u} within 4 s. Check the cable or Wi-Fi, that this tablet and the server are on the same network, and the port.` });
+      setTest({ state: 'fail', text: `No answer from ${u} within 4 s. Check the cable or Wi-Fi, that this tablet and the server are on the same network, and that the address ends with the API base (for example /Competitionuat/api/v1).` });
     } finally {
-      clearTimeout(t);
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -99,8 +96,8 @@ export default function Connection() {
 
             <Panel>
               <Txt v="overline" color="inkMuted">Scoring server</Txt>
-              <Txt v="caption" color="inkMuted">Address of the scoring server on the venue network. The same address works over the cable or Wi-Fi.</Txt>
-              <TextInput value={url} onChangeText={(t) => { setUrl(t); setTest({ state: 'idle' }); }} placeholder="192.168.1.10:8080" placeholderTextColor={c.inkMuted}
+              <Txt v="caption" color="inkMuted">API base address of the scoring server, for example https://host/Competitionuat/api/v1. The same address works over the cable or Wi-Fi.</Txt>
+              <TextInput value={url} onChangeText={(t) => { setUrl(t); setTest({ state: 'idle' }); }} placeholder="https://host/Competitionuat/api/v1" placeholderTextColor={c.inkMuted}
                 autoCapitalize="none" autoCorrect={false} keyboardType="url" inputMode="url" returnKeyType="done"
                 onFocus={() => setEditing(true)} onBlur={() => { setEditing(false); save(); }} onSubmitEditing={runTest}
                 accessibilityLabel="Scoring server address"
@@ -110,7 +107,7 @@ export default function Connection() {
                 {test.state === 'testing' ? <ActivityIndicator color={c.goldText} /> : null}
               </View>
               <Notice tone={test.state === 'ok' ? 'ok' : 'alert'} text={test.state === 'ok' || test.state === 'fail' ? test.text ?? null : null} />
-              <Notice tone="info" text="Leave the address empty to use the UAT server. A saved address is used from the next sign-in." />
+              <Notice tone="info" text="The address must be the API base, ending in /api/v1. Leave it empty to use the UAT server. A saved address takes effect immediately for new requests." />
               <Button label="Live status" icon="list" variant="secondary" onPress={() => router.push('/ring-status')} />
             </Panel>
           </View>

@@ -17,7 +17,7 @@ import { palettes } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
 // The saved server address must be known before the first API call.
-loadDeviceSettings().finally(startLive);
+loadDeviceSettings().finally(() => { try { startLive(); } catch (e) { console.warn(e); } });
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
