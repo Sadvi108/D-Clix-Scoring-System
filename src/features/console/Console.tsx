@@ -60,12 +60,17 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
   const { c } = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
-  const [stopping, setStopping] = useState(false);
+  const [stopping, setStopping] = useState<string | null>(null);
   const [seatNo, setSeatNo] = useState<number | null>(null);
   const [asking, setAsking] = useState<Ask | null>(null);
   const [sheet, setSheet] = useState<'walkover' | 'noshow' | 'winner' | 'rematch' | 'more' | 'forms' | null>(null);
   const [tvLink, setTvLink] = useState<DisplayLink | null>(null);
-  const ask = (a: Ask) => { setSeatNo(null); setSheet(null); setAsking(a); };
+  // A sheet opened for one game never acts on the next one: everything closes when the game changes.
+  const [shownGame, setShownGame] = useState(v.gameId);
+  if (shownGame !== v.gameId) { setShownGame(v.gameId); setStopping(null); setSeatNo(null); setSheet(null); setAsking(null); }
+  // Close the current sheet first and open the confirmation on the next tick (iOS drops a Modal
+  // presented while another is being dismissed).
+  const ask = (a: Ask) => { setSeatNo(null); setSheet(null); setTimeout(() => setAsking(a), 0); };
   const sheetCtx = { v, run, ask, onClose: () => setSheet(null) };
   const seatTile = seatNo != null ? v.seats.find((s) => s.seat === seatNo) ?? null : null;
   const gameId = v.gameId;
@@ -109,7 +114,7 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
       {act.start ? <Button label={act.start.label} icon="play" disabled={busy} onPress={() => run('Start', () => api.start(gameId))} /> : null}
       {act.pause ? <Button label={act.pause.label} icon="pause" variant="secondary" disabled={busy} onPress={() => run('Pause', () => api.pause(gameId))} /> : null}
       {act.resume ? <Button label={act.resume.label} icon="play" disabled={busy} onPress={() => run('Resume', () => api.resume(gameId))} /> : null}
-      {act.stop ? <Button label={act.stop.label} icon="stop" variant="danger" disabled={busy} onPress={() => setStopping(true)} /> : null}
+      {act.stop ? <Button label={act.stop.label} icon="stop" variant="danger" disabled={busy} onPress={() => setStopping(gameId)} /> : null}
     </View>
   ) : null;
 
@@ -211,7 +216,7 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
           onConfirm={(reason) => { const a = asking; setAsking(null); a.go(reason); }}
         />
       ) : null}
-      {stopping && gameId ? (
+      {stopping ? (
         <ActionSheet
           title="Stop this game?"
           text="The clock stops now. Judges can still send their scores."
@@ -219,8 +224,8 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
           reasonRequired
           okLabel="Stop game"
           danger
-          onClose={() => setStopping(false)}
-          onConfirm={(reason) => { setStopping(false); void run('Stop', () => api.stop(gameId, reason), 'Game stopped'); }}
+          onClose={() => setStopping(null)}
+          onConfirm={(reason) => { const id = stopping; setStopping(null); void run('Stop', () => api.stop(id, reason), 'Game stopped'); }}
         />
       ) : null}
     </SafeAreaView>

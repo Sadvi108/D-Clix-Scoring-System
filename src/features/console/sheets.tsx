@@ -233,7 +233,7 @@ export function MoreSheet({ v, run, ask, onClose }: SheetCtx) {
         reasonRequired: true,
         okLabel: dqing ? 'Disqualify' : 'Reinstate',
         danger: dqing,
-        go: (reason) => void run(dqing ? 'Disqualify' : 'Reinstate', () => (dqing ? api.disqualify(gameId, entryId, reason) : api.reinstate(gameId, entryId, reason)), dqing ? 'Athlete disqualified' : 'Athlete reinstated'),
+        go: (reason) => void run(dqing ? 'Disqualify' : 'Reinstate', () => (dqing ? api.disqualify(o.gameId, entryId, reason) : api.reinstate(o.gameId, entryId, reason)), dqing ? 'Athlete disqualified' : 'Athlete reinstated'),
       });
     };
     return (
@@ -253,7 +253,7 @@ export function MoreSheet({ v, run, ask, onClose }: SheetCtx) {
       reason: 'Reason',
       reasonRequired: type.requireReason,
       okLabel: 'Apply penalty',
-      go: (reason) => void run('Penalty', () => api.penalty(gameId, perf.performanceId, type.code, reason), 'Penalty applied'),
+      go: (reason) => void run('Penalty', () => api.penalty(o.gameId, perf.performanceId, type.code, reason), 'Penalty applied'),
     });
   };
   const restart = () => {
@@ -266,7 +266,7 @@ export function MoreSheet({ v, run, ask, onClose }: SheetCtx) {
       reasonRequired: true,
       okLabel: 'Restart',
       danger: true,
-      go: (reason) => void run('Restart', () => api.restart(gameId, 'RESTART', reason), (r) => ((r as ActionResult | undefined)?.outcome === 'DISQUALIFIED' ? 'Restart limit reached: disqualified' : 'Restarted')),
+      go: (reason) => void run('Restart', () => api.restart(o.gameId, 'RESTART', reason), (r) => ((r as ActionResult | undefined)?.outcome === 'DISQUALIFIED' ? 'Restart limit reached: disqualified' : 'Restarted')),
     });
   };
   const reperform = () => ask({
@@ -276,7 +276,7 @@ export function MoreSheet({ v, run, ask, onClose }: SheetCtx) {
     reasonRequired: true,
     okLabel: 'Re-perform',
     danger: true,
-    go: (reason) => void run('Re-perform', () => api.restart(gameId, 'REPERFORM', reason), 'Re-perform ordered'),
+    go: (reason) => void run('Re-perform', () => api.restart(o.gameId, 'REPERFORM', reason), 'Re-perform ordered'),
   });
 
   return (
@@ -345,7 +345,7 @@ export function FormsSheet({ v, run, ask, onClose }: SheetCtx) {
   const [sel, setSel] = useState<number[] | null>(null);
   if (!gameId) return null;
   if (!o) return <CenterSheet title="Forms of this game" onClose={onClose}><Loading error={error} /></CenterSheet>;
-  return <FormsBody o={o} gameId={gameId} run={run} ask={ask} onClose={onClose} sel={sel} setSel={setSel} />;
+  return <FormsBody o={o} gameId={o.gameId} run={run} ask={ask} onClose={onClose} sel={sel} setSel={setSel} />;
 }
 
 function FormsBody({ o, gameId, run, ask, onClose, sel, setSel }: { o: GameForms; gameId: string; run: SheetCtx['run']; ask: AskFn; onClose: () => void; sel: number[] | null; setSel: (s: number[]) => void }) {
@@ -396,13 +396,19 @@ const TV_MODES: { value: string; label: string }[] = [
 export function TvLinkSheet({ link, onClose }: { link: DisplayLink; onClose: () => void }) {
   const [mode, setMode] = useState('');
   const key = link.displayKey ?? link.key ?? '';
-  const url = `${baseUrl().replace(/\/api\/v1\/?$/, '')}/display/${key}?lang=${texts.lang()}${mode ? `&mode=${mode}` : ''}`;
+  // The TV page lives next to the API: the site root is the server address before `/api/v…`.
+  const root = baseUrl().replace(/\/+$/, '').replace(/\/api(\/v\d+)?(\/.*)?$/, '');
+  const url = key ? `${root}/display/${key}?lang=${texts.lang()}${mode ? `&mode=${mode}` : ''}` : null;
   return (
     <CenterSheet title={`TV link · Ring ${link.ring}`} subtitle="Open this address in the TV browser." onClose={onClose}>
       <Txt v="caption" color="inkMuted">Fixed view</Txt>
       <ChipRow value={mode} options={TV_MODES} onChange={setMode} />
-      <Txt v="body" selectable style={{ fontSize: 14 }}>{url}</Txt>
-      <Txt v="caption" color="inkMuted">Press and hold the address to select and copy it. The old link no longer works.</Txt>
+      {url ? (
+        <>
+          <Txt v="body" selectable style={{ fontSize: 14 }}>{url}</Txt>
+          <Txt v="caption" color="inkMuted">Press and hold the address to select and copy it. The old link no longer works.</Txt>
+        </>
+      ) : <Txt v="body" color="alertText">The server sent no display key. Try again, or open the TV link from the web console.</Txt>}
       <Button label="Close" variant="secondary" block onPress={onClose} />
     </CenterSheet>
   );

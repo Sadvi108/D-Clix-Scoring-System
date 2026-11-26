@@ -1,7 +1,7 @@
 // Centered dialog for officials' actions (seat options, walkover, penalty). No open/close animation:
 // taps made during an animation can be dropped on tablets.
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { Icon, Txt } from './primitives';
@@ -12,6 +12,8 @@ export function CenterSheet({ title, subtitle, onClose, children, width = 520 }:
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} supportedOrientations={['portrait', 'landscape']}>
       <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={onClose} accessibilityLabel="Close" />
+      {/* The reason box sits right above OK: the card moves up with the keyboard so OK stays visible. */}
+      <KeyboardAvoidingView style={StyleSheet.absoluteFill} behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
       <View style={styles.wrap} pointerEvents="box-none">
         <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.hairline, maxWidth: width, maxHeight: height - 32 }]}>
           <View style={styles.head}>
@@ -21,9 +23,10 @@ export function CenterSheet({ title, subtitle, onClose, children, width = 520 }:
             </View>
             <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}><Icon name="close" size={22} color={c.inkMuted} /></Pressable>
           </View>
-          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space[3] }}>{children}</ScrollView>
+          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space[3] }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -46,7 +49,7 @@ export function ChoiceRow({ label, detail, on, onPress, tone = 'ink', disabled }
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: space[4] },
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space[4] },
   card: { width: '100%', borderRadius: radius.lg, borderWidth: 1, padding: space[5], gap: space[3] },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: space[3] },
   row: { flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 52, paddingHorizontal: space[4], paddingVertical: space[2], borderRadius: radius.md, borderWidth: 1.5 },

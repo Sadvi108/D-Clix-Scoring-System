@@ -1,4 +1,5 @@
 // Read-only panels of the console: judge tiles, the judge board and the provisional result.
+import { usePkSides } from '@/features/judge/sideLayout';
 import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 import type { ActionResult, ReviewAthlete, ReviewJudge } from '@/api/types';
@@ -75,9 +76,12 @@ function BoardColumnView({ col, free, big }: { col: BoardColumn; free: boolean; 
 export function JudgeBoard({ v }: { v: ConsoleView }) {
   const { c } = useTheme();
   const [full, setFull] = useState(false);
+  const { swapped } = usePkSides();
   if (!v.board.length || !v.seats.length) return null;
+  // Same left/right as the athlete plates (PK swap sides).
+  const board = v.kind === 'PK' && swapped ? [...v.board].reverse() : v.board;
   const cols = (big: boolean) => (
-    <View style={styles.cols}>{v.board.map((col) => <BoardColumnView key={col.corner + col.name} col={col} free={v.free} big={big} />)}</View>
+    <View style={styles.cols}>{board.map((col) => <BoardColumnView key={col.corner + col.name} col={col} free={v.free} big={big} />)}</View>
   );
   return (
     <Panel>
