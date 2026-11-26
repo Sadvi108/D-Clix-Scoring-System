@@ -16,8 +16,8 @@ import { AthletePlate, MatchBar } from '@/ui/match';
 import { Segmented, StepTrack } from '@/ui/officials';
 import { Button, Icon, Panel, Txt } from '@/ui/primitives';
 import { ActionSheet } from './ActionSheet';
-import { JudgeBoard, JudgeTiles, Provisional } from './panels';
-import { SeatSheet, type Ask } from './sheets';
+import { ActionsPanel, JudgeBoard, JudgeTiles, Provisional, TiePanel } from './panels';
+import { NoShowSheet, SeatSheet, TieSheet, WalkoverSheet, type Ask } from './sheets';
 import { useConsoleLive, type RunFn } from './useConsoleLive';
 
 export interface ConsoleBodyProps {
@@ -63,7 +63,9 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
   const [stopping, setStopping] = useState(false);
   const [seatNo, setSeatNo] = useState<number | null>(null);
   const [asking, setAsking] = useState<Ask | null>(null);
-  const ask = (a: Ask) => { setSeatNo(null); setAsking(a); };
+  const [sheet, setSheet] = useState<'walkover' | 'noshow' | 'winner' | 'rematch' | null>(null);
+  const ask = (a: Ask) => { setSeatNo(null); setSheet(null); setAsking(a); };
+  const sheetCtx = { v, run, ask, onClose: () => setSheet(null) };
   const seatTile = seatNo != null ? v.seats.find((s) => s.seat === seatNo) ?? null : null;
   const gameId = v.gameId;
   const roleLabel = v.role === 'CHIEF' ? 'Chief referee' : 'Ring operator';
@@ -138,7 +140,12 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
           <Provisional v={v} />
         </>
       ) : null}
-      {/* Task 7: release, declare, walkover, no-show, tie panel. */}
+      {v.mode === 'game' ? (
+        <>
+          <TiePanel v={v} busy={busy} onWinner={() => setSheet('winner')} onRematch={() => setSheet('rematch')} />
+          <ActionsPanel v={v} run={run} ask={ask} busy={busy} onWalkover={() => setSheet('walkover')} onNoShow={() => setSheet('noshow')} />
+        </>
+      ) : null}
       {/* Task 8: more actions, PK forms, TV link. */}
       {v.mode === 'game' || v.mode === 'empty' ? (
         <Panel>
@@ -174,6 +181,9 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
         {!wide ? queue : null}
       </ScrollView>
       {seatTile ? <SeatSheet v={v} run={run} ask={ask} onClose={() => setSeatNo(null)} seat={seatTile} /> : null}
+      {sheet === 'walkover' ? <WalkoverSheet {...sheetCtx} /> : null}
+      {sheet === 'noshow' ? <NoShowSheet {...sheetCtx} /> : null}
+      {sheet === 'winner' || sheet === 'rematch' ? <TieSheet {...sheetCtx} mode={sheet === 'winner' ? 'WINNER' : 'REMATCH'} /> : null}
       {asking ? (
         <ActionSheet
           title={asking.title}

@@ -5,7 +5,8 @@ import type { Review } from '@/api/types';
 import { api, poller, session, useLive, useSession } from '@/live';
 import { buildConsoleView, needsReview, type ConsoleView } from '@/live/consoleView';
 
-export type RunFn = (label: string, fn: () => Promise<unknown>, done?: string) => Promise<void>;
+/** `done` is the notice after success: text, or a function of what the action returned. */
+export type RunFn = (label: string, fn: () => Promise<unknown>, done?: string | ((result: unknown) => string)) => Promise<void>;
 
 export interface ConsoleModel {
   view: ConsoleView;
@@ -71,8 +72,8 @@ export function useConsoleLive(): ConsoleModel {
     setBusy(true);
     setError(null);
     try {
-      await fn();
-      showNotice(done ?? `${label} done`);
+      const result = await fn();
+      showNotice(typeof done === 'function' ? done(result) : done ?? `${label} done`);
       void poller.pollNow();
       setTick((n) => n + 1);
     } catch (e) {

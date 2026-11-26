@@ -1,12 +1,15 @@
 // Read-only panels of the console: judge tiles, the judge board and the provisional result.
 import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
-import type { ReviewAthlete, ReviewJudge } from '@/api/types';
+import type { ActionResult, ReviewAthlete, ReviewJudge } from '@/api/types';
+import { api } from '@/live';
 import type { BoardColumn, BoardRow, ConsoleView, SeatStatus } from '@/live/consoleView';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { JudgeStatusGrid, type JudgeState } from '@/ui/officials';
 import { Button, Panel, Txt } from '@/ui/primitives';
+import type { AskFn } from './sheets';
+import type { RunFn } from './useConsoleLive';
 
 const JUDGE_STATE: Record<SeatStatus, JudgeState> = { SENT: 'sent', DRAFT: 'scoring', WAITING: 'waiting', OFFLINE: 'offline', EMPTY: 'offline' };
 
@@ -161,6 +164,99 @@ export function Provisional({ v }: { v: ConsoleView }) {
         </>
       ) : null}
       {v.reviewForms.map((f) => <ReviewTable key={f.formNo} name={`${f.name || 'Form'} · F${f.formNo}`} athletes={f.athletes} />)}
+    </Panel>
+  );
+}
+
+/** Release, declare, walkover, no-show (and later the more-actions buttons). */
+export function ActionsPanel({ v, run, ask, busy, onWalkover, onNoShow }: {
+  v: ConsoleView; run: RunFn; ask: AskFn; busy: boolean; onWalkover: () => void; onNoShow: () => void;
+}) {
+  const act = v.actions;
+  const gameId = v.gameId;
+  if (!gameId) return null;
+  const blue = v.athletes.find((a) => a.corner === 'BLUE');
+  const red = v.athletes.find((a) => a.corner === 'RED');
+  const declare = (winner: 'BLUE' | 'RED') => {
+    const name = (winner === 'BLUE' ? blue : red)?.name ?? winner;
+    const sug = v.declare?.suggested;
+    const against = (sug === 'BLUE' || sug === 'RED') && sug !== winner;
+    ask({
+      title: `Declare ${name} the winner?`,
+      text: against ? `The scores suggest ${sug === 'BLUE' ? 'Blue' : 'Red'}. You are declaring against the suggestion.` : undefined,
+      reason: against ? 'Reason (required against the suggestion)' : 'Reason (optional)',
+      reasonRequired: against,
+      okLabel: 'Declare winner',
+      go: (reason) => void run('Declare', () => api.declare(gameId, winner, reason), `${name} declared the winner`),
+    });
+  };
+  const release = () => ask({
+    title: 'Release the result?',
+    text: 'The result is published to the venue display.',
+    reason: 'Reason (optional)',
+    okLabel: 'Release',
+    go: (reason) => void run('Release', () => api.release(gameId, reason), (r) => ((r as ActionResult | undefined)?.outcome === 'TIE_OPEN' ? 'Tie: the chief referee decides' : 'Released')),
+  });
+  const other = act.walkover || act.noshow || act.release;
+  if (!act.declare && !other) return null;
+  return (
+    <Panel>
+      <Txt v="overline" color="inkMuted">Result</Txt>
+      {act.declare && v.declare?.waitForChief ? (
+        <Txt v="label" color="goldText">Tie: waiting for the chief referee</Txt>
+      ) : act.declare ? (
+        <View style={styles.cols}>
+          {([['BLUE', blue], ['RED', red]] as const).map(([corner, a]) => (
+            <Button key={corner} variant={corner === 'BLUE' ? 'chung' : 'hong'} size="lg" disabled={busy || !a}
+              label={`Declare ${a?.name ?? corner}${v.declare?.suggested === corner ? ' ★' : ''}`} onPress={() => declare(corner)} style={{ flex: 1, minWidth: 200 }} />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.cols}>
+        {act.release ? <Button label={act.release.label} icon="check" disabled={busy} onPress={release} /> : null}
+        {act.walkover ? <Button label={act.walkover.label} variant="secondary" disabled={busy} onPress={onWalkover} /> : null}
+        {act.noshow ? <Button label={act.noshow.label} variant="secondary" disabled={busy} onPress={onNoShow} /> : null}
+      </View>
+    </Panel>
+  );
+}
+
+/** Tied athletes, and what the chief or operator can do about it. */
+export function TiePanel({ v, busy, onWinner, onRematch }: { v: ConsoleView; busy: boolean; onWinner: () => void; onRematch: () => void }) {
+  const { c } = useTheme();
+  const tie = v.tie;
+  if (!tie) return null;
+  if (tie.state === 'RESOLVED') {
+    return <Panel><Txt v="label" color="okText">Tie resolved</Txt></Panel>;
+  }
+  return (
+    <Panel>
+      <Txt v="overline" color="inkMuted">Tie</Txt>
+      <View>
+        <View style={styles.trow}>
+          <Txt v="caption" color="inkMuted" style={styles.ncol}>Athlete</Txt>
+          <Txt v="caption" color="inkMuted" style={styles.jcol}>Rank</Txt>
+          <Txt v="caption" color="inkMuted" style={styles.jcol}>Total</Txt>
+        </View>
+        {(tie.athletes ?? []).map((a) => (
+          <View key={a.entryId} style={[styles.trow, { borderTopWidth: 1, borderTopColor: c.hairline }]}>
+            <View style={styles.ncol}>
+              <Txt v="label" numberOfLines={1}>{a.name}</Txt>
+              {a.team ? <Txt v="caption" color="inkMuted" numberOfLines={1}>{a.team}</Txt> : null}
+            </View>
+            <Txt v="caption" style={styles.jcol}>{a.rank ?? '–'}</Txt>
+            <Txt v="scoreMd" style={[styles.jcol, { fontSize: 18 }]}>{a.total ?? '–'}</Txt>
+          </View>
+        ))}
+      </View>
+      {tie.canDecide ? (
+        <View style={styles.cols}>
+          <Button label="Choose the winner" disabled={busy} onPress={onWinner} />
+          <Button label="Order a rematch" variant="secondary" disabled={busy || !(tie.forms ?? []).length} onPress={onRematch} />
+        </View>
+      ) : (
+        <Txt v="label" color="goldText">Waiting for the chief referee</Txt>
+      )}
     </Panel>
   );
 }
