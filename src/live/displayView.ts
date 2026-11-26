@@ -17,7 +17,7 @@ export interface DisplayView {
   modeLabel: string;
   next: string | null;
   showResult: boolean;
-  result: { title: string; athletes: DisplayResultLine[] } | null;
+  result: { title: string; kind: 'PK' | 'CUTOFF' | null; athletes: DisplayResultLine[] } | null;
 }
 
 const MODE: Record<string, string> = { CALLUP: 'Call-up', LIVECLOCK: 'Scoring in progress', RESULT: 'Result' };
@@ -28,6 +28,7 @@ export function buildDisplayView(f: DisplayFeed, sinceMs: number): DisplayView {
   const lr = f.lastResult;
   const result = lr ? {
     title: join([lr.gameNo != null ? String(lr.gameNo) : null, lr.label ?? null]),
+    kind: lr.kind ?? null,
     athletes: (lr.athletes ?? []).map((a) => ({
       corner: a.corner, name: a.name, team: a.team ?? '', total: a.total ?? '—', rank: a.rank != null ? String(a.rank) : null, winner: !!lr.winner && lr.winner === a.corner,
     })),
@@ -43,7 +44,7 @@ export function buildDisplayView(f: DisplayFeed, sinceMs: number): DisplayView {
     clock: clockView(c?.clock ?? null, sinceMs),
     modeLabel: MODE[f.mode] ?? String(f.mode),
     next: f.next ? `${f.next.gameNo} · ${f.next.label}` : null,
-    showResult: f.mode === 'RESULT' && !!result,
+    showResult: f.mode === 'RESULT' && !!result && result.athletes.length > 0,
     result,
   };
 }

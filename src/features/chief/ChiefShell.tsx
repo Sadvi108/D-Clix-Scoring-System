@@ -52,7 +52,7 @@ function Frame({ tab, children }: { tab: ChiefTab; children: ReactNode }) {
       {TABS.map((t) => {
         const on = t.id === tab;
         return (
-          <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => router.replace(t.href)}
+          <Pressable key={t.id} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => router.dismissTo(t.href)}
             style={({ pressed }) => [styles.tab, { backgroundColor: on ? c.ink : pressed ? c.surfaceRaised : c.surface, borderColor: on ? c.ink : c.controlBorder }, !wide && { flex: 1 }]}>
             <Icon name={t.icon} size={16} color={on ? c.surface : c.ink} />
             <Txt v="label" color={on ? c.surface : 'ink'}>{t.label}</Txt>
@@ -65,7 +65,7 @@ function Frame({ tab, children }: { tab: ChiefTab; children: ReactNode }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top', 'left', 'right']}>
       <View style={[styles.head, { backgroundColor: c.surface, borderBottomColor: c.hairline }]}>
         <View style={styles.bar}>
-          <Pressable onPress={() => router.replace(p?.ring ? '/referee' : '/rings')} accessibilityRole="button" accessibilityLabel="Back to the ring console" hitSlop={8}
+          <Pressable onPress={() => router.dismissTo(p?.ring ? '/referee' : '/rings')} accessibilityRole="button" accessibilityLabel="Back to the ring console" hitSlop={8}
             style={({ pressed }) => [styles.round, { borderColor: c.hairline, backgroundColor: pressed ? c.surfaceRaised : 'transparent' }]}>
             <Icon name="menu" size={20} />
             {wide ? <Txt v="label">Console</Txt> : null}

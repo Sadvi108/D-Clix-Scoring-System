@@ -1,12 +1,12 @@
 // Ranking of one cut-off round from GET /rounds/{id}/results; the chief confirms the qualifiers
 // (POST /rounds/{id}/qualify, confirmed) once every athlete is scored and no tie straddles the cut.
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ApiError } from '@/api/client';
 import { ChiefShell } from '@/features/chief/ChiefShell';
 import { ToneTag } from '@/features/chief/ToneTag';
-import { api, useSession } from '@/live';
+import { api, session, useSession } from '@/live';
 import { resultsView } from '@/live/chiefView';
 import { usePolled } from '@/live/usePolled';
 import { useTheme } from '@/theme/ThemeContext';
@@ -25,26 +25,36 @@ function Results() {
   const role = useSession().profile?.role ?? 'OPERATOR';
   const { round } = useLocalSearchParams<{ round?: string }>();
   const roundId = Number(round);
-  const { data, error, setData } = usePolled(() => api.roundResults(roundId), 10000, [roundId]);
+  const valid = !!round && Number.isFinite(roundId);
+  const { data, error, setData, reload } = usePolled(() => (valid ? api.roundResults(roundId) : Promise.resolve(null)), valid ? 10000 : 0, [roundId, valid]);
   const [busy, setBusy] = useState(false);
+  // Set before the confirmation opens, so a double tap cannot send the final action twice.
+  const busyRef = useRef(false);
   const [msg, setMsg] = useState<{ text: string; tone: 'ok' | 'alert' } | null>(null);
   const back = <Button label="‹  Rounds" variant="secondary" onPress={() => (router.canGoBack() ? router.back() : router.replace('/chief/rounds'))} />;
-  if (!round || Number.isNaN(roundId)) return <>{back}<Txt v="body" color="inkMuted">Choose a round from the Rounds tab.</Txt></>;
+  if (!valid) return <>{back}<Txt v="body" color="inkMuted">Choose a round from the Rounds tab.</Txt></>;
   if (!data) return <>{back}<Notice text={error} />{error ? null : <Txt v="body" color="inkMuted">Loading…</Txt>}</>;
   const v = resultsView(data, role);
 
   async function qualify() {
-    const yes = await confirm({ title: 'Confirm the qualifiers?', message: `${data!.qualifyCount ?? ''} athletes go through. The next round list is then generated in TMS.`, ok: 'Confirm qualifiers', cancel: 'Cancel' });
-    if (!yes) return;
-    setBusy(true); setMsg(null);
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
+      const yes = await confirm({ title: 'Confirm the qualifiers?', message: `${data!.qualifyCount ?? ''} athletes go through. The next round list is then generated in TMS.`, ok: 'Confirm qualifiers', cancel: 'Cancel' });
+      if (!yes) return;
+      setMsg(null);
       const r = await api.qualify(roundId);
       if (r.results) setData(r.results);
       setMsg({ text: 'Qualifiers confirmed.', tone: 'ok' });
     } catch (e) {
+      session.handleError(e);
       setMsg({ text: e instanceof ApiError ? e.message : String(e), tone: 'alert' });
     } finally {
+      busyRef.current = false;
       setBusy(false);
+      // Drops a poll that started before the action and loads the server's state now.
+      reload();
     }
   }
 

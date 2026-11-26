@@ -27,9 +27,9 @@ function Detail() {
   const wide = width >= 900;
   const { swapped } = usePkSides();
   const { id, ring } = useLocalSearchParams<{ id: string; ring?: string }>();
-  const { data, error } = usePolled(() => api.historyGame(id, ring), 0, [id, ring]);
+  const { data, error, reload } = usePolled(() => api.historyGame(id, ring), 0, [id, ring]);
   const back = <Button label="‹  History" variant="secondary" onPress={() => (router.canGoBack() ? router.back() : router.replace('/chief/history'))} />;
-  if (!data) return <>{back}<Notice text={error} />{error ? null : <Txt v="body" color="inkMuted">Loading…</Txt>}</>;
+  if (!data) return <>{back}<Notice text={error} />{error ? <Button label="Try again" variant="secondary" onPress={reload} /> : <Txt v="body" color="inkMuted">Loading…</Txt>}</>;
   const g = data.game;
   if (!g) return <>{back}<Txt v="body" color="inkMuted">This game is not in the history.</Txt></>;
   const pk = g.kind === 'PK';

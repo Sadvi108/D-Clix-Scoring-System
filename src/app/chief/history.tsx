@@ -32,6 +32,8 @@ function List() {
     const r = ring ?? (await api.rings()).rings[0]?.ring;
     return api.history({ ring: r, q, limit: 60 });
   }, 10000, [ring, q]);
+  // After a ring switch the old list stays until the new one arrives: do not show it as the new ring.
+  const stale = !!data && !!ring && data.ring.toUpperCase() !== ring.toUpperCase();
   const rows = data?.games.map(historyRow) ?? [];
 
   return (
@@ -40,7 +42,7 @@ function List() {
       <View style={[styles.tools, { flexDirection: wide ? 'row' : 'column' }]}>
         <View style={styles.tabs} accessibilityRole="tablist">
           {(data?.rings ?? []).map((r) => {
-            const on = r === (data?.ring ?? ring);
+            const on = r === (ring ?? data?.ring);
             return (
               <Pressable key={r} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => setRing(r)}
                 style={[styles.tab, { backgroundColor: on ? c.ink : c.surface, borderColor: on ? c.ink : c.controlBorder }]}>
@@ -56,8 +58,8 @@ function List() {
           {typed ? <Pressable onPress={() => setTyped('')} accessibilityLabel="Clear search" hitSlop={8}><Icon name="close" size={16} color={c.inkMuted} /></Pressable> : null}
         </View>
       </View>
-      <Notice text={error && !data ? error : null} />
-      {!data ? <Txt v="body" color="inkMuted">Loading…</Txt> : rows.length === 0 ? (
+      <Notice text={error && (!data || stale) ? error : null} />
+      {!data || stale ? <Txt v="body" color="inkMuted">{error ? '' : 'Loading…'}</Txt> : rows.length === 0 ? (
         <View style={[styles.empty, { borderColor: c.controlBorder }]}>
           <Txt v="body" color="inkMuted">{q ? 'No finished games match the search.' : `No finished games on Ring ${data.ring} yet.`}</Txt>
         </View>

@@ -29,10 +29,13 @@ export default function Scoreboard() {
     if (params.key) { void asyncStorageKV.set(KEY, params.key); return; }
     void asyncStorageKV.get(KEY).then((k) => { setKey(k); setReady(true); });
   }, [params.key]);
-  const save = (k: string) => { void asyncStorageKV.set(KEY, k); setKey(k); };
+  const [note, setNote] = useState<string | undefined>(undefined);
+  const save = (k: string) => { void asyncStorageKV.set(KEY, k); setNote(undefined); setKey(k); };
+  const forget = (why?: string) => { void asyncStorageKV.remove(KEY); setNote(why); setKey(null); };
   if (!ready) return null;
-  if (!key) return <KeyForm onKey={save} />;
-  return <Board tvKey={key} onKey={save} onForget={() => { void asyncStorageKV.remove(KEY); setKey(null); }} />;
+  // A new Board mounts for every key, so re-entering the same key polls again from scratch.
+  if (!key) return <KeyForm onKey={save} note={note} />;
+  return <Board key={key} tvKey={key} onGone={() => forget('This TV key no longer works. Create a new TV link in the console.')} onForget={() => forget()} />;
 }
 
 function KeyForm({ onKey, note }: { onKey: (k: string) => void; note?: string }) {
@@ -55,7 +58,7 @@ function KeyForm({ onKey, note }: { onKey: (k: string) => void; note?: string })
   );
 }
 
-function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) => void; onForget: () => void }) {
+function Board({ tvKey, onGone, onForget }: { tvKey: string; onGone: () => void; onForget: () => void }) {
   const router = useRouter();
   const { c } = useTheme();
   const { width, height } = useWindowDimensions();
@@ -71,14 +74,17 @@ function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) =
     }
   }, 1500, [tvKey]);
   const [now, setNow] = useState(() => Date.now());
-  const running = !!data?.current?.clock?.running;
+  // Same running flag as the clock text (a break counts down with running: false on the feed).
+  const running = !!data && buildDisplayView(data, 0).clock.running;
+  const failing = !!error;
   useEffect(() => {
-    if (!running) return;
+    if (!running && !failing) return;
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
-  }, [running]);
-  const gone = error && /not.?found|NOT_FOUND/i.test(error);
-  if (gone) return <KeyForm note="This TV key no longer works. Create a new TV link in the console." onKey={onKey} />;
+  }, [running, failing]);
+  const gone = !!error && /not.?found|NOT_FOUND/i.test(error);
+  useEffect(() => { if (gone) onGone(); }, [gone, onGone]);
+  if (gone) return null;
   if (!data) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.ground, alignItems: 'center', justifyContent: 'center', gap: space[3] }}>
@@ -90,7 +96,8 @@ function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) =
   const v = buildDisplayView(data, Math.max(0, now - at));
   const pk = v.kind === 'PK';
   const athletes = pk && left === 'hong' ? [...v.athletes].reverse() : v.athletes;
-  const resultLines = v.result ? (pk && left === 'hong' ? [...v.result.athletes].reverse() : v.result.athletes) : [];
+  const resultLines = v.result ? (v.result.kind === 'PK' && left === 'hong' ? [...v.result.athletes].reverse() : v.result.athletes) : [];
+  const lost = !!error && now - at > 5000;
 
   const plate = (a: DisplayAthlete, mirror: boolean) => {
     const red = a.corner === 'RED';
@@ -123,7 +130,7 @@ function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) =
       <StatusBar style="light" />
       <View style={[styles.bar, { backgroundColor: c.surface, borderBottomColor: c.hairline }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
-          <Pressable onPress={() => router.replace('/')} accessibilityRole="button" accessibilityLabel="Leave the venue display" hitSlop={10}
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} accessibilityRole="button" accessibilityLabel="Leave the venue display" hitSlop={10}
             style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? c.surfaceRaised : 'transparent' })}>
             <Icon name="menu" size={22} color={c.inkMuted} />
           </Pressable>
@@ -135,7 +142,7 @@ function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) =
           {v.sub ? <Txt v="caption" color="inkMuted" numberOfLines={1}>{v.sub}</Txt> : null}
         </View>
         <View style={{ flexDirection: 'row', gap: space[3], alignItems: 'center' }}>
-          {pk ? <Button icon="swap" variant="secondary" accessibilityLabel="Swap Chung and Hong sides" onPress={toggleSides} style={{ minHeight: 40, paddingHorizontal: 10 }} /> : null}
+          {pk || v.result?.kind === 'PK' ? <Button icon="swap" variant="secondary" accessibilityLabel="Swap Chung and Hong sides" onPress={toggleSides} style={{ minHeight: 40, paddingHorizontal: 10 }} /> : null}
           <RuleBadge tone="draft" label="UAT" />
         </View>
       </View>
@@ -159,7 +166,7 @@ function Board({ tvKey, onKey, onForget }: { tvKey: string; onKey: (k: string) =
       <View style={[styles.foot, { backgroundColor: c.surface, borderTopColor: c.hairline }]}>
         <Txt v="overline" color="inkMuted">{v.showResult && v.result ? `Result · ${v.result.title}` : v.next && !v.idle ? `Next: ${v.next}` : ''}</Txt>
         <Txt v="scoreHero" color={v.clock.running ? 'goldText' : 'ink'} style={{ fontSize: 40, lineHeight: 42 }}>{v.idle ? '' : v.clock.text}</Txt>
-        <Txt v="overline" color="inkMuted">{v.modeLabel}</Txt>
+        <Txt v="overline" color={lost ? 'alertText' : 'inkMuted'}>{lost ? 'Reconnecting…' : v.modeLabel}</Txt>
       </View>
     </SafeAreaView>
   );

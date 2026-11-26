@@ -35,7 +35,7 @@ function Rings() {
     setBusy(ring); setErr(null);
     try {
       if (!p?.ring || p.ring.toUpperCase() !== ring.toUpperCase()) { await session.claim(ring); afterClaim(); }
-      router.replace('/referee');
+      router.dismissTo('/referee');
     } catch (e) {
       if (!session.handleError(e)) setErr(e instanceof ApiError ? e.message : String(e));
     } finally {

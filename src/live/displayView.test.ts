@@ -18,6 +18,9 @@ test('result mode shows the last result with the winner', () => {
   assert.equal(v.showResult, true);
   assert.deepEqual(v.result?.athletes.map((a) => [a.name, a.total, a.winner]), [['OLD BLUE', '7.100', false], ['OLD RED', '7.300', true]]);
   assert.equal(v.result?.title, '20 · OLD BLUE vs OLD RED');
+  assert.equal(v.result?.kind, 'PK');
+  const empty = buildDisplayView({ ...displayLive, mode: 'RESULT', lastResult: { gameNo: 20, athletes: [] } }, 0);
+  assert.equal(empty.showResult, false);
 });
 
 test('call-up and idle', () => {
