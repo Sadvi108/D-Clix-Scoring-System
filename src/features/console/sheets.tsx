@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
 import type { ActionResult, DisplayLink, GameForms, OptionsPerformance } from '@/api/types';
 import type { ConsoleView, SeatTile } from '@/live/consoleView';
 import { api, baseUrl, texts } from '@/live';
@@ -394,6 +395,7 @@ const TV_MODES: { value: string; label: string }[] = [
 
 /** The new TV address, with an optional fixed view. No clipboard module is installed, so the text is selectable. */
 export function TvLinkSheet({ link, onClose }: { link: DisplayLink; onClose: () => void }) {
+  const router = useRouter();
   const [mode, setMode] = useState('');
   const key = link.displayKey ?? link.key ?? '';
   // The TV page lives next to the API: the site root is the server address before `/api/v…`.
@@ -407,6 +409,7 @@ export function TvLinkSheet({ link, onClose }: { link: DisplayLink; onClose: () 
         <>
           <Txt v="body" selectable style={{ fontSize: 14 }}>{url}</Txt>
           <Txt v="caption" color="inkMuted">Press and hold the address to select and copy it. The old link no longer works.</Txt>
+          <Button label="Open on this device" icon="tv" variant="secondary" block onPress={() => { onClose(); router.push({ pathname: '/scoreboard', params: { key } }); }} />
         </>
       ) : <Txt v="body" color="alertText">The server sent no display key. Try again, or open the TV link from the web console.</Txt>}
       <Button label="Close" variant="secondary" block onPress={onClose} />
