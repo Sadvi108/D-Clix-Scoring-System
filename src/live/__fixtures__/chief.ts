@@ -1,6 +1,6 @@
 // Chief data shaped like UAT (2026-11-26 captures of /rings/overview, /history, /rounds) with sample
 // athletes; history detail, results and PK rows follow the OpenAPI 1.3.4 examples and live.php.
-import type { HistoryDetail, HistoryList, OverviewRing, RingsOverview, RoundResults, RoundsList } from '../../api/types';
+import type { DisplayFeed, HistoryDetail, HistoryList, OverviewRing, RingsOverview, RoundResults, RoundsList } from '../../api/types';
 
 const ringA: OverviewRing = {
   ring: 'A', version: 3, gamesTotal: 13, gamesDone: 4, gamesLeft: 9,
@@ -81,3 +81,19 @@ export const results: RoundResults = {
     { entryId: 4, name: 'FOURTH', team: 'T4', rank: null, total: null, accuracy: null, presentation: null, status: 'NO_SHOW', tie: false, scored: false, qualified: null, inCut: false },
   ],
 };
+
+export const displayLive: DisplayFeed = {
+  ring: 'A', mode: 'LIVECLOCK',
+  current: {
+    gameId: 'g-21', gameNo: 21, kind: 'PK', label: 'SAMPLE BLUE vs SAMPLE RED', roundName: 'Final', category: 'MIXED PAIR · Cadet', formNo: 1, formName: 'Keumgang',
+    athletes: [{ corner: 'BLUE', entryId: 7001, name: 'SAMPLE BLUE', team: 'TEAM BLUE' }, { corner: 'RED', entryId: 7002, name: 'SAMPLE RED', team: 'TEAM RED' }],
+    clock: { state: 'RUNNING', running: true, plannedSec: 90, elapsedMs: 20000, remainingMs: 70000, timeUp: false },
+    stage: 'SCORING_OPEN', waiting: null,
+  },
+  next: { gameNo: 22, label: 'NEXT A vs NEXT B' },
+  lastResult: {
+    gameNo: 20, label: 'OLD BLUE vs OLD RED', kind: 'PK', winner: 'RED',
+    athletes: [{ corner: 'BLUE', name: 'OLD BLUE', total: '7.100' }, { corner: 'RED', name: 'OLD RED', total: '7.300' }],
+  },
+};
+export const displayIdle: DisplayFeed = { ring: 'A', mode: 'LIVECLOCK', current: null, next: null, lastResult: null };
