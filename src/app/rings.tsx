@@ -98,6 +98,7 @@ export default function RingsScreen() {
           <Txt v="title" style={{ fontSize: wide ? 24 : 20 }}>{t('wl_choose_ring', 'Choose your ring')}</Txt>
           <Txt v="caption" color="inkMuted" numberOfLines={1}>{p.name} · {t(ROLE_KEY[p.role][0], ROLE_KEY[p.role][1])} · {p.tournament.name}</Txt>
         </View>
+        {p.role === 'CHIEF' ? <Button label={t('wl_tab_all', 'All rings')} icon="menu" variant="secondary" onPress={() => router.push('/chief')} /> : null}
         <Button label={t('sign_out', 'Sign out')} icon="signout" variant="secondary" onPress={() => { void signOut(); }} />
       </View>
       <ScrollView contentContainerStyle={[styles.body, { paddingHorizontal: wide ? space[6] : space[4] }]}

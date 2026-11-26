@@ -27,7 +27,11 @@ function List() {
   const [typed, setTyped] = useState('');
   const [q, setQ] = useState('');
   useEffect(() => { const t = setTimeout(() => setQ(typed.trim()), 400); return () => clearTimeout(t); }, [typed]);
-  const { data, error } = usePolled(() => api.history({ ring, q, limit: 60 }), 10000, [ring, q]);
+  // The server needs a ring when this chief has none open: start with the first ring of the day.
+  const { data, error } = usePolled(async () => {
+    const r = ring ?? (await api.rings()).rings[0]?.ring;
+    return api.history({ ring: r, q, limit: 60 });
+  }, 10000, [ring, q]);
   const rows = data?.games.map(historyRow) ?? [];
 
   return (

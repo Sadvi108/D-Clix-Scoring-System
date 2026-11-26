@@ -96,8 +96,8 @@ function Card({ rc, busy, disabled, onOpen, onHistory }: { rc: RingCard; busy: b
         <View style={styles.who}><Icon name="users" size={14} color={c.inkMuted} /><Txt v="caption" color="inkMuted">Referees {rc.judgesOnline} online / {rc.judgesSignedIn} signed in</Txt></View>
       </View>
       <View style={{ flexDirection: 'row', gap: space[2] }}>
-        <View style={{ flex: 1 }}><Button label={busy ? 'Opening…' : rc.mine ? 'Back to this ring' : 'Open this ring'} icon="chevron" variant={rc.mine ? 'primary' : 'secondary'} size="lg" block disabled={disabled} onPress={onOpen} /></View>
-        <Button label="History" icon="list" variant="secondary" size="lg" onPress={onHistory} />
+        <View style={{ flex: 1 }}><Button label={busy ? 'Opening…' : rc.mine ? 'Back to ring' : 'Open ring'} icon="chevron" variant={rc.mine ? 'primary' : 'secondary'} size="lg" block disabled={disabled} onPress={onOpen} /></View>
+        <Button icon="list" accessibilityLabel={`History of Ring ${rc.ring}`} variant="secondary" size="lg" onPress={onHistory} />
       </View>
     </View>
   );
