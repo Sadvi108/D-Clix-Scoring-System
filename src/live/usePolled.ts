@@ -1,6 +1,7 @@
 // Load now, then again `everyMs` after each reply (never two requests at once). `deps` restart it.
-// `everyMs: 0` loads once. The last good data stays while a later poll fails.
+// `everyMs: 0` loads once. The last good data stays while a later poll fails; sign-in errors sign out.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { session } from './index';
 
 export function usePolled<T>(load: () => Promise<T>, everyMs: number, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
@@ -20,6 +21,8 @@ export function usePolled<T>(load: () => Promise<T>, everyMs: number, deps: unkn
         setData(d); setError(null); setAt(Date.now());
       } catch (e) {
         if (!alive) return;
+        // An expired or replaced sign-in signs the tablet out (the screens then go to sign-in).
+        session.handleError(e);
         setError(e instanceof Error ? e.message : String(e));
       }
       if (alive && everyMs > 0) timer = setTimeout(run, everyMs);
