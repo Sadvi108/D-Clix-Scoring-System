@@ -1,8 +1,9 @@
-// One function per API endpoint. Later plans add the operator, chief and results endpoints here.
+// One function per API endpoint.
 import type { Request } from './client';
 import type {
-  ActionResult, DeviceInfo, DisplayLink, DisplayMode, GameForms, GameOptions, Languages, LoginData, Meta, Profile, Receipt, Review,
-  RingState, Rings, ScoreEntry, SendScoresBody, Sheet, Texts,
+  ActionResult, DeviceInfo, DisplayFeed, DisplayLink, DisplayMode, GameForms, GameOptions, HistoryDetail, HistoryList, Languages,
+  LoginData, Meta, Profile, QualifyResult, Receipt, Review, RingState, Rings, RingsOverview, RoundResults, RoundsList, ScoreEntry,
+  SendScoresBody, Sheet, Texts,
 } from './types';
 
 const id = (gameId: string) => encodeURIComponent(gameId);
@@ -66,6 +67,16 @@ export function makeEndpoints(req: Request) {
     setForms: (gameId: string, forms: number[], reason: string) => req<ActionResult>('PUT', `/games/${id(gameId)}/forms`, { forms, reason }),
     setDisplay: (mode: DisplayMode) => req<unknown>('PUT', '/ring/display', { mode }),
     displayLink: () => req<DisplayLink>('POST', '/ring/display-link', {}),
+
+    overview: () => req<RingsOverview>('GET', '/rings/overview'),
+    history: (o: { ring?: string; q?: string; limit?: number }) =>
+      req<HistoryList>('GET', `/history?limit=${o.limit ?? 60}&q=${encodeURIComponent(o.q ?? '')}${o.ring ? `&ring=${encodeURIComponent(o.ring)}` : ''}`),
+    historyGame: (gameId: string, ring?: string) =>
+      req<HistoryDetail>('GET', `/history/${id(gameId)}${ring ? `?ring=${encodeURIComponent(ring)}` : ''}`),
+    rounds: () => req<RoundsList>('GET', '/rounds'),
+    roundResults: (roundId: number) => req<RoundResults>('GET', `/rounds/${roundId}/results`),
+    qualify: (roundId: number) => req<QualifyResult>('POST', `/rounds/${roundId}/qualify`, { confirmed: true }),
+    display: (key: string) => req<DisplayFeed>('GET', `/display/${encodeURIComponent(key)}`),
   };
 }
 

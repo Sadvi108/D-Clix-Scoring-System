@@ -232,3 +232,125 @@ export interface GameForms {
 }
 export interface ActionResult { outcome?: string; stage?: Stage; gameId?: string; version?: number; winner?: Corner; message?: string; penaltyId?: number }
 export interface DisplayLink { ring: string; displayKey?: string; key?: string }
+
+// ---- Chief: all rings, history, rounds, results (Plan 4) ----
+export interface OverviewGame {
+  gameId: string;
+  gameNo: number | string;
+  method?: string;
+  kind: 'PK' | 'CUTOFF';
+  roundName?: string | null;
+  label: string;
+  athletes: Athlete[];
+  stage: Stage;
+  formNo: number | null;
+  tie: string | null;
+  clock: Clock | null;
+  seats: { sent: number; total: number | null };
+}
+export interface OverviewRing {
+  ring: string;
+  version?: number;
+  gamesTotal: number;
+  gamesDone: number;
+  gamesLeft: number;
+  operatorOnline: boolean;
+  operatorSignedIn: boolean;
+  judgesSignedIn: number;
+  judgesOnline: number;
+  current: OverviewGame | null;
+}
+export interface RingsOverview { date: string; rings: OverviewRing[] }
+
+export type GameOutcome = 'RELEASED' | 'WITHDRAWN' | 'NO_SHOW' | 'DISQUALIFIED' | (string & {});
+export interface HistoryAthlete extends Athlete { result?: { total: string | null; rank: number | null } | null }
+export interface HistoryGame {
+  gameId: string;
+  gameNo: number | string;
+  ring?: string;
+  kind: 'PK' | 'CUTOFF';
+  outcome: GameOutcome;
+  winner?: Corner | null;
+  label: string;
+  roundName?: string | null;
+  stopped?: boolean;
+  finishedAt?: string | null;
+  athletes?: HistoryAthlete[];
+}
+export interface HistoryList { ring: string; date: string; rings: string[]; total: number; games: HistoryGame[] }
+export interface AuditItem { action: string; reason: string | null; at: string; winner?: string | null; seat?: number | null; by?: string | null }
+export interface HistoryDetail { game: HistoryGame | null; review: Review | null; audit: AuditItem[] }
+
+export interface CutoffRound {
+  roundId: number;
+  code: string;
+  seq: number;
+  category: string;
+  ageGroup?: string | null;
+  gender?: string | null;
+  eventType?: string | null;
+  status: string;
+  qualifyCount: number | null;
+  athletes: number;
+  scored: number;
+  decided: boolean;
+}
+export interface PkGameRow { gameId: string; gameNo: number | string; ring?: string; roundName?: string | null; label: string; winner?: string | null; loser?: string | null }
+export interface PkCategory { category: string; ageGroup?: string | null; gender?: string | null; eventType?: string | null; games: PkGameRow[] }
+export interface RoundsList { date: string; rounds: CutoffRound[]; pk?: PkCategory[] }
+
+export interface ResultRow {
+  entryId: number;
+  name: string;
+  team?: string | null;
+  rank: number | null;
+  total: string | null;
+  accuracy: string | null;
+  presentation: string | null;
+  status: string;
+  tie: boolean;
+  scored: boolean;
+  qualified: boolean | null;
+  inCut: boolean;
+}
+export interface RoundResults {
+  roundId: number;
+  code: string;
+  category?: string | null;
+  ageGroup?: string | null;
+  gender?: string | null;
+  eventType?: string | null;
+  free?: boolean;
+  qualifyCount: number | null;
+  complete: boolean;
+  tieAtCut: boolean;
+  confirmed: boolean;
+  canConfirm: boolean;
+  rows: ResultRow[];
+}
+export interface QualifyResult { outcome: string; qualified: number; results: RoundResults | null }
+
+// ---- Public display feed (no sign-in) ----
+export interface DisplayGame {
+  gameId?: string;
+  gameNo: number | string;
+  kind?: 'PK' | 'CUTOFF';
+  label?: string | null;
+  roundName?: string | null;
+  category?: string | null;
+  formNo?: number | null;
+  formName?: string | null;
+  athletes?: Athlete[];
+  clock?: Clock | null;
+  stage?: Stage;
+  waiting?: string | null;
+}
+export interface DisplayResultAthlete { corner: Corner; name: string; team?: string | null; total?: string | null; accuracy?: string | null; presentation?: string | null; rank?: number | null }
+export interface DisplayResult { gameNo?: number | string; label?: string | null; kind?: 'PK' | 'CUTOFF'; winner?: Corner | null; athletes?: DisplayResultAthlete[] }
+export interface DisplayFeed {
+  ring: string;
+  mode: DisplayMode;
+  current: DisplayGame | null;
+  next: { gameNo: number | string; label: string } | null;
+  lastResult: DisplayResult | null;
+}

@@ -93,3 +93,28 @@ test('console endpoints: paths, methods and confirmed bodies', async () => {
   assert.deepEqual(calls[21].body, { forms: [4, 5], reason: '' });
   assert.deepEqual(calls[22].body, { mode: 'RESULT' });
 });
+
+test('chief, results and display endpoints', async () => {
+  const { api, calls } = recorder();
+  await api.overview();
+  await api.history({ ring: 'B', q: 'lee & co', limit: 60 });
+  await api.history({});
+  await api.historyGame('g-12', 'C');
+  await api.historyGame('g-3');
+  await api.rounds();
+  await api.roundResults(254);
+  await api.qualify(254);
+  await api.display('k3j/x');
+  assert.deepEqual(calls.map((c) => `${c.method} ${c.path}`), [
+    'GET /rings/overview',
+    'GET /history?limit=60&q=lee%20%26%20co&ring=B',
+    'GET /history?limit=60&q=',
+    'GET /history/g-12?ring=C',
+    'GET /history/g-3',
+    'GET /rounds',
+    'GET /rounds/254/results',
+    'POST /rounds/254/qualify',
+    'GET /display/k3j%2Fx',
+  ]);
+  assert.deepEqual(calls[7].body, { confirmed: true });
+});
