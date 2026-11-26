@@ -15,6 +15,6 @@ test('a judge needs a seat as well as a ring', () => {
 });
 
 test('operator and chief with a ring go to work', () => {
-  assert.equal(homeFor(p({ role: 'OPERATOR', ring: 'A' })), '/ring-status');
-  assert.equal(homeFor(p({ role: 'CHIEF', ring: 'B' })), '/ring-status');
+  assert.equal(homeFor(p({ role: 'OPERATOR', ring: 'A' })), '/operator');
+  assert.equal(homeFor(p({ role: 'CHIEF', ring: 'B' })), '/referee');
 });
