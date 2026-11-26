@@ -55,6 +55,8 @@ export interface Clock {
   remainingMs: number | null;
   elapsedMs: number;
   break?: ClockBreak | null;
+  plannedSec?: number | null;
+  timeUp?: boolean;
 }
 /** One athlete's figures as the ring state carries them (seat drafts and sent scores). */
 export interface FigureLine { corner: Corner; accuracy: string | null; presentation: string | null; total?: string | null }
@@ -152,3 +154,81 @@ export interface Receipt {
   locked: boolean;
   duplicate: boolean;
 }
+
+// Console (operator and chief) types, shaped from UAT 2026-11-26.
+export interface ReviewJudge {
+  seat: number;
+  parts: { code: string; value: string }[];
+  penalty: string;
+  total: string;
+  counted: boolean;
+  accCounted?: boolean;
+  presCounted?: boolean;
+  excluded: 'HIGH' | 'LOW' | null;
+  revision: number;
+  offline: boolean;
+  receivedAt: string;
+}
+export interface ReviewAthlete {
+  corner: Corner;
+  name: string;
+  team?: string;
+  status: string;
+  attempt: number;
+  penalties: unknown[];
+  provisional: string | null;
+  judges: ReviewJudge[];
+}
+export interface ReviewForm { formNo: number; name: string; free?: boolean; athletes: ReviewAthlete[] }
+export interface ReviewPkAthlete { corner: Corner; total: string | null; accuracy: string | null; presentation: string | null; rank?: number | null }
+export interface ReviewPk { suggested: 'BLUE' | 'RED' | 'TIE' | 'NONE'; declareMode?: string | null; declared?: boolean; athletes: ReviewPkAthlete[] }
+export interface ReviewTie {
+  state: 'NONE' | 'OPEN' | 'RESOLVED' | (string & {});
+  athletes?: { entryId: number; name: string; team?: string; rank: number | null; total: string | null }[];
+  forms?: { formNo: number; name?: string }[];
+}
+export interface Review {
+  gameId: string;
+  gameNo?: number;
+  stage: Stage;
+  kind: 'PK' | 'CUTOFF';
+  pk: ReviewPk | null;
+  tie: ReviewTie;
+  forms: ReviewForm[];
+  result: unknown[];
+}
+
+export interface OptionsPenalty { penaltyId: number; code?: string; label: string; value: string; reason?: string | null }
+export interface OptionsPerformance {
+  performanceId: number;
+  entryId: number;
+  corner: Corner;
+  name: string;
+  formNo: number;
+  formName: string;
+  status: string;
+  attempt: number;
+  ruleSetId: number;
+  restartsUsed: number;
+  penalties: OptionsPenalty[];
+}
+export interface PenaltyType { code: string; label: string; value: string; appliedBy: 'OPERATOR' | 'CHIEF'; requireReason: boolean; max: number | null }
+export interface RestartRule { restartAllowed: boolean; maxRestarts: number | null; restartPenalty: string | null; disqualifyAt: number | null; disqualifyMode?: string }
+export interface GameOptions {
+  gameId: string;
+  stage: Stage;
+  kind: 'PK' | 'CUTOFF';
+  formNo: number | null;
+  performances: OptionsPerformance[];
+  penaltyTypes: Record<string, PenaltyType[]>;
+  rules: Record<string, RestartRule>;
+}
+export interface GameForms {
+  gameId: string;
+  forms: { formNo: number; name: string }[];
+  available: { formId: number; code: string; name: string }[];
+  locked: boolean;
+  changedOnTheDay: unknown;
+}
+export interface ActionResult { outcome?: string; stage?: Stage; gameId?: string; version?: number; winner?: Corner; message?: string; penaltyId?: number }
+export interface DisplayLink { ring: string; displayKey?: string; key?: string }
