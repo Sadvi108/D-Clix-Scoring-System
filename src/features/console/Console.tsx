@@ -95,6 +95,7 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
 
   const queue = (
     <Panel style={{ width: wide ? 340 : undefined, flexShrink: 0 }}>
+      {v.role === 'CHIEF' ? <Button label="All rings" icon="menu" variant="secondary" block onPress={() => router.push('/chief')} /> : null}
       <View style={styles.ph}><Txt v="overline" color="inkMuted">{v.ring ? `Ring ${v.ring}` : 'Ring'} queue</Txt></View>
       {v.queue.previous.length ? <>{section('Previous')}{v.queue.previous.slice(0, 4).map((q) => queueRow(q, 'prev'))}</> : null}
       {v.queue.now ? <>{section('Now')}{queueRow(v.queue.now, 'now')}</> : null}

@@ -1,6 +1,4 @@
 import type { PerformanceStatus } from '@/core/types';
-import type { ScoringSnapshot } from '@/data';
-import type { JudgeState } from '@/ui/officials';
 
 export const LIFECYCLE = ['Called', 'On mat', 'Scoring open', 'Judges sent', 'With RIC', 'Released'] as const;
 const ORDER: PerformanceStatus[] = ['CALLED', 'ON_MAT', 'OPEN', 'COMPLETE', 'WITH_RIC', 'RELEASED'];
@@ -12,17 +10,6 @@ export function lifecycleSteps(status: PerformanceStatus | undefined) {
     label,
     state: (status === 'RELEASED' ? 'done' : i < at ? 'done' : i === at ? 'current' : 'todo') as 'done' | 'current' | 'todo',
   }));
-}
-
-/** Submission status per judge — never their figures. */
-export function judgeStates(s: ScoringSnapshot): { no: number; state: JudgeState }[] {
-  const st = s.current?.status;
-  return s.judges.map((j) => {
-    const sent = s.submissions.some((x) => x.judgeNo === j.judgeNo);
-    if (sent) return { no: j.judgeNo, state: 'sent' };
-    if (!j.online) return { no: j.judgeNo, state: 'offline' };
-    return { no: j.judgeNo, state: st === 'OPEN' ? 'scoring' : 'waiting' };
-  });
 }
 
 export function hhmmss(iso: string | null | undefined) {

@@ -1,15 +1,13 @@
 # D-Clix Scoring System — backend API contract
 
-For the backend developer. The mobile app talks to the backend only through the
-`ScoringApi` interface in `src/data/ScoringApi.ts`. Today that interface is served by
-`MockScoringApi` (in-app prototype data). Your job is to provide the real service so
-`HttpScoringApi` (`src/data/http/HttpScoringApi.ts`) can implement the same interface.
+For the backend developer. This is the original prototype contract. The in-app mock
+(`src/data`, `ScoringApi`, `MockScoringApi`) has been removed: the app now talks to the
+D-Clix API through `src/api` (client and endpoints) and `src/live`.
 
-Switch the app to the real backend with two environment variables (no screen changes):
+Point the app at a server with one environment variable (or on the Device connection screen):
 
 ```bash
-EXPO_PUBLIC_API_MODE=http
-EXPO_PUBLIC_API_URL=https://your-server/api
+EXPO_PUBLIC_API_URL=https://your-server/api/v1
 ```
 
 Names follow the MAASUAT `[tms].Poomsae*` tables and the V2.0 design. Routes below are
