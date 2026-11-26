@@ -1,12 +1,12 @@
 // Phase 1 · Master rules and scoring settings (P_RuleSet, P_DeductionType, P_PresentationCriterion).
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
-import { api, useScoring } from '@/data';
 import { isConfigured } from '@/sports/poomsae/rules';
 import { useTheme } from '@/theme/ThemeContext';
 import { space } from '@/theme/tokens';
 import { ChipRow, KV, MiniStepper, Notice } from '@/ui/console';
 import { Button, Panel, RuleBadge, Txt } from '@/ui/primitives';
+import { tms as api, useSetupSample as useScoring } from './sample';
 
 const pts = (t: number) => (t / 10).toFixed(1);
 
@@ -60,7 +60,7 @@ export function RulesTab({ wide }: { wide: boolean }) {
             <Notice tone="info" text={`${rs.name} criteria are not set yet (awaiting WT sign-off). Rounds that use this rule set cannot be called to the mat.`} />
           ) : null}
           <Button label={rs.status === 'APPROVED' ? 'Approved · locked' : 'Approve rule set'} icon={rs.status === 'APPROVED' ? 'lock' : 'check'} block
-            disabled={!editable || !configured} onPress={approve} />
+            disabled onPress={approve} />
           <Notice text={msg?.text ?? null} tone={msg?.tone} />
         </Panel>
 
@@ -77,7 +77,7 @@ export function RulesTab({ wide }: { wide: boolean }) {
                   <Txt v="label">{d.label} deduction</Txt>
                   <Txt v="mono" color="inkMuted">{d.code}</Txt>
                 </View>
-                <MiniStepper label={`${d.label} deduction`} value={d.tenths} min={1} max={10} format={(v) => `−${pts(v)}`} disabled={!editable}
+                <MiniStepper label={`${d.label} deduction`} value={d.tenths} min={1} max={10} format={(v) => `−${pts(v)}`} disabled
                   onChange={(v) => run(api.updateRuleSet(rs.id, { deductions: rs.deductions.map((x, j) => (j === i ? { ...x, tenths: v } : x)) }))} />
               </View>
             ))}
@@ -95,12 +95,12 @@ export function RulesTab({ wide }: { wide: boolean }) {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[4], alignItems: 'center' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
                     <Txt v="caption" color="inkMuted">Min</Txt>
-                    <MiniStepper label={`${cr.short} minimum`} value={cr.minTenths} min={0} max={cr.maxTenths - 1} format={pts} disabled={!editable}
+                    <MiniStepper label={`${cr.short} minimum`} value={cr.minTenths} min={0} max={cr.maxTenths - 1} format={pts} disabled
                       onChange={(v) => run(api.updateRuleSet(rs.id, { criteria: rs.criteria.map((x, j) => (j === i ? { ...x, minTenths: v } : x)) }))} />
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
                     <Txt v="caption" color="inkMuted">Max</Txt>
-                    <MiniStepper label={`${cr.short} maximum`} value={cr.maxTenths} min={cr.minTenths + 1} max={rs.presentationMaxTenths} format={pts} disabled={!editable}
+                    <MiniStepper label={`${cr.short} maximum`} value={cr.maxTenths} min={cr.minTenths + 1} max={rs.presentationMaxTenths} format={pts} disabled
                       onChange={(v) => run(api.updateRuleSet(rs.id, { criteria: rs.criteria.map((x, j) => (j === i ? { ...x, maxTenths: v } : x)) }))} />
                   </View>
                   <Txt v="caption" color="inkMuted">Step {pts(cr.stepTenths)}</Txt>

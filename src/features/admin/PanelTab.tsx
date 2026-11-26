@@ -2,13 +2,13 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import type { Official, PanelSeat } from '@/core/types';
-import { api, useScoring } from '@/data';
 import { hhmmss } from '@/features/officials/helpers';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { KV, Notice, PickerSheet } from '@/ui/console';
 import { Segmented } from '@/ui/officials';
 import { Button, Icon, Panel, StatusPill, Txt } from '@/ui/primitives';
+import { tms as api, useSetupSample as useScoring } from './sample';
 
 const CLEAR: Official = { officialId: '', name: 'Leave seat empty', nat: '', licence: 'National', role: 'JUDGE' };
 
@@ -39,8 +39,10 @@ export function PanelTab({ wide }: { wide: boolean }) {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
             <Txt v="caption" color="inkMuted">Judges</Txt>
-            <Segmented value={String(panel.judgeCount)} onChange={(v) => run(api.setPanelSize(Number(v)))}
-              options={['3', '5', '7'].map((v) => ({ value: v, label: v }))} />
+            <View pointerEvents="none" style={{ opacity: 0.6 }}>
+              <Segmented value={String(panel.judgeCount)} onChange={(v) => run(api.setPanelSize(Number(v)))}
+                options={['3', '5', '7'].map((v) => ({ value: v, label: v }))} />
+            </View>
           </View>
         </View>
         <View style={{ flexDirection: wide ? 'row' : 'column', columnGap: space[5] }}>
@@ -97,7 +99,7 @@ function SeatCard({ seat, wide, official, onAssign, onRun }: { seat: PanelSeat; 
             </>
           ) : <Txt v="label" color="alertText">No judge assigned</Txt>}
         </View>
-        <Button icon="pencil" variant="secondary" accessibilityLabel={`Change judge on seat ${seat.judgeNo}`} onPress={onAssign} style={{ minHeight: 40, paddingHorizontal: 12 }} />
+        <Button icon="pencil" variant="secondary" accessibilityLabel={`Change judge on seat ${seat.judgeNo}`} disabled onPress={onAssign} style={{ minHeight: 40, paddingHorizontal: 12 }} />
       </View>
 
       {seat.pairedAt ? (
@@ -109,7 +111,7 @@ function SeatCard({ seat, wide, official, onAssign, onRun }: { seat: PanelSeat; 
               <Txt v="caption" color="inkMuted">Paired {hhmmss(seat.pairedAt)}</Txt>
             </View>
           </View>
-          {isMe ? <StatusPill status="online" label="This device" compact /> : <Button label="Unpair" icon="close" variant="ghost" onPress={() => onRun(api.unpairDevice(seat.judgeNo))} style={{ minHeight: 40 }} />}
+          {isMe ? <StatusPill status="online" label="This device" compact /> : <Button label="Unpair" icon="close" variant="ghost" disabled onPress={() => onRun(api.unpairDevice(seat.judgeNo))} style={{ minHeight: 40 }} />}
         </View>
       ) : seat.pairingCode ? (
         <View style={{ alignItems: 'center', gap: 4, padding: space[3], borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: c.goldText, backgroundColor: c.goldSoft }}>
@@ -123,7 +125,7 @@ function SeatCard({ seat, wide, official, onAssign, onRun }: { seat: PanelSeat; 
             <Icon name="wifi-off" size={18} color={c.alertText} />
             <Txt v="caption" color="alertText">No device paired</Txt>
           </View>
-          <Button label="Pair device" icon="link" disabled={!official} onPress={() => onRun(api.pairDevice(seat.judgeNo))} style={{ minHeight: 40 }} />
+          <Button label="Pair device" icon="link" disabled onPress={() => onRun(api.pairDevice(seat.judgeNo))} style={{ minHeight: 40 }} />
         </View>
       )}
     </Panel>

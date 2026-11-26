@@ -2,14 +2,13 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import type { CategoryMode, CategoryRound, RoundStatus } from '@/core/types';
-import { api, useScoring } from '@/data';
-import { TMS_FORMS } from '@/data/mock/seed';
 import { isConfigured } from '@/sports/poomsae/rules';
 import { useTheme } from '@/theme/ThemeContext';
 import { radius, space } from '@/theme/tokens';
 import { ChipRow, KV, MiniStepper, Notice, PickerSheet } from '@/ui/console';
 import { Segmented } from '@/ui/officials';
 import { Button, Icon, Panel, RuleBadge, Txt, type BadgeTone } from '@/ui/primitives';
+import { TMS_FORMS, tms as api, useSetupSample as useScoring } from './sample';
 
 export const MODE_LABEL: Record<CategoryMode, string> = { CUTOFF: 'Cut-off', PK: 'PK', PK_CUTOFF: 'PK + Cut-off' };
 export const STATUS: Record<RoundStatus, { tone: BadgeTone; label: string }> = {
@@ -84,15 +83,17 @@ function RoundCard({ round: r, wide, onError }: { round: CategoryRound; wide: bo
       <View style={{ gap: space[3] }}>
         <Row label="Format">
           {editable ? (
-            <Segmented value={r.format} onChange={(v) => save(v === 'PK' ? { format: v, forms: r.forms.slice(0, 1) } : { format: v })}
-              options={[{ value: 'CUTOFF', label: 'Cut-off' }, { value: 'PK', label: 'PK' }]} />
+            <View pointerEvents="none" style={{ opacity: 0.6 }}>
+              <Segmented value={r.format} onChange={(v) => save(v === 'PK' ? { format: v, forms: r.forms.slice(0, 1) } : { format: v })}
+                options={[{ value: 'CUTOFF', label: 'Cut-off' }, { value: 'PK', label: 'PK' }]} />
+            </View>
           ) : <Txt v="label">{r.format === 'PK' ? 'PK' : 'Cut-off'}</Txt>}
         </Row>
 
         <Row label={r.format === 'PK' ? 'Form' : 'Forms'}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[2], justifyContent: 'flex-end' }}>
             {r.forms.map((f, i) => (
-              <Pressable key={f.formNo} disabled={!editable} onPress={() => setFormSlot(i)} accessibilityRole="button" accessibilityLabel={`Form ${f.formNo}: ${f.name}. Change`}
+              <Pressable key={f.formNo} disabled onPress={() => setFormSlot(i)} accessibilityRole="button" accessibilityLabel={`Form ${f.formNo}: ${f.name}. Change`}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, minHeight: 36, borderRadius: radius.sm, borderWidth: 1, borderColor: c.hairline, backgroundColor: c.surfaceRaised }}>
                 <Txt v="caption" color="inkMuted">{f.formNo}</Txt>
                 <Txt v="label">{f.name}</Txt>
@@ -101,23 +102,25 @@ function RoundCard({ round: r, wide, onError }: { round: CategoryRound; wide: bo
             ))}
             {editable && r.format === 'CUTOFF' ? (
               r.forms.length === 1
-                ? <Button label="Add form" icon="plus" variant="ghost" onPress={() => save({ forms: [...r.forms, { formNo: 2, tmsFormId: 'TMS-FRM-KORYO', name: 'Koryo' }] })} style={{ minHeight: 36, paddingHorizontal: 8 }} />
-                : <Button label="Remove" icon="minus" variant="ghost" onPress={() => save({ forms: r.forms.slice(0, 1) })} style={{ minHeight: 36, paddingHorizontal: 8 }} />
+                ? <Button label="Add form" icon="plus" variant="ghost" disabled onPress={() => save({ forms: [...r.forms, { formNo: 2, tmsFormId: 'TMS-FRM-KORYO', name: 'Koryo' }] })} style={{ minHeight: 36, paddingHorizontal: 8 }} />
+                : <Button label="Remove" icon="minus" variant="ghost" disabled onPress={() => save({ forms: r.forms.slice(0, 1) })} style={{ minHeight: 36, paddingHorizontal: 8 }} />
             ) : null}
           </View>
         </Row>
 
         <Row label="Judges">
           {editable ? (
-            <Segmented value={String(r.judgeCount)} onChange={(v) => save({ judgeCount: Number(v) })}
-              options={(rules?.judgeCounts ?? [3, 5, 7]).map((n) => ({ value: String(n), label: String(n) }))} />
+            <View pointerEvents="none" style={{ opacity: 0.6 }}>
+              <Segmented value={String(r.judgeCount)} onChange={(v) => save({ judgeCount: Number(v) })}
+                options={(rules?.judgeCounts ?? [3, 5, 7]).map((n) => ({ value: String(n), label: String(n) }))} />
+            </View>
           ) : <Txt v="label">{r.judgeCount}</Txt>}
         </Row>
 
         <Row label={r.advanceCount == null ? 'Result' : r.format === 'PK' ? 'Winners advance' : 'Advance'}>
           {r.advanceCount == null ? <Txt v="label">Final · medals</Txt>
             : editable && r.format === 'CUTOFF'
-              ? <MiniStepper label="Entries that advance" value={r.advanceCount} min={1} max={32} onChange={(v) => save({ advanceCount: v })} />
+              ? <MiniStepper label="Entries that advance" value={r.advanceCount} min={1} max={32} disabled onChange={(v) => save({ advanceCount: v })} />
               : <Txt v="label">{r.advanceCount}</Txt>}
         </Row>
 
