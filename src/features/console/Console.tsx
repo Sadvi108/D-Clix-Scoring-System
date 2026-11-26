@@ -16,6 +16,8 @@ import { AthletePlate, MatchBar } from '@/ui/match';
 import { Segmented, StepTrack } from '@/ui/officials';
 import { Button, Icon, Panel, Txt } from '@/ui/primitives';
 import { ActionSheet } from './ActionSheet';
+import { JudgeBoard, JudgeTiles, Provisional } from './panels';
+import { SeatSheet, type Ask } from './sheets';
 import { useConsoleLive, type RunFn } from './useConsoleLive';
 
 export interface ConsoleBodyProps {
@@ -59,6 +61,10 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [stopping, setStopping] = useState(false);
+  const [seatNo, setSeatNo] = useState<number | null>(null);
+  const [asking, setAsking] = useState<Ask | null>(null);
+  const ask = (a: Ask) => { setSeatNo(null); setAsking(a); };
+  const seatTile = seatNo != null ? v.seats.find((s) => s.seat === seatNo) ?? null : null;
   const gameId = v.gameId;
   const roleLabel = v.role === 'CHIEF' ? 'Chief referee' : 'Ring operator';
 
@@ -125,7 +131,13 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
         </Panel>
       ) : null}
       {v.mode === 'game' ? <BoutPanel v={v} wide={wide} tags={tags}>{clockButtons}</BoutPanel> : null}
-      {/* Task 6: judge tiles, judge board, provisional result. */}
+      {v.mode === 'game' ? (
+        <>
+          <JudgeTiles v={v} onSeat={setSeatNo} />
+          <JudgeBoard v={v} />
+          <Provisional v={v} />
+        </>
+      ) : null}
       {/* Task 7: release, declare, walkover, no-show, tie panel. */}
       {/* Task 8: more actions, PK forms, TV link. */}
       {v.mode === 'game' || v.mode === 'empty' ? (
@@ -161,6 +173,19 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
         </View>
         {!wide ? queue : null}
       </ScrollView>
+      {seatTile ? <SeatSheet v={v} run={run} ask={ask} onClose={() => setSeatNo(null)} seat={seatTile} /> : null}
+      {asking ? (
+        <ActionSheet
+          title={asking.title}
+          text={asking.text}
+          reason={asking.reason}
+          reasonRequired={asking.reasonRequired}
+          okLabel={asking.okLabel}
+          danger={asking.danger}
+          onClose={() => setAsking(null)}
+          onConfirm={(reason) => { const a = asking; setAsking(null); a.go(reason); }}
+        />
+      ) : null}
       {stopping && gameId ? (
         <ActionSheet
           title="Stop this game?"
