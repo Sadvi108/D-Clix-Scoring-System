@@ -120,7 +120,7 @@ function JudgeTotal({ j }: { j: ReviewJudge | undefined }) {
   );
 }
 
-function ReviewTable({ name, athletes }: { name: string; athletes: ReviewAthlete[] }) {
+export function ReviewTable({ name, athletes }: { name: string; athletes: ReviewAthlete[] }) {
   const { c } = useTheme();
   const seats = [...new Set(athletes.flatMap((a) => a.judges.map((j) => j.seat)))].sort((a, b) => a - b);
   return (
