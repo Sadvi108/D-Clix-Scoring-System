@@ -2,10 +2,12 @@
 // goes through `ask`, which the console turns into an ActionSheet and `run(...)`.
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { ActionResult, DisplayLink, GameForms, OptionsPerformance } from '@/api/types';
 import type { ConsoleView, SeatTile } from '@/live/consoleView';
-import { api } from '@/live';
+import { api, baseUrl, texts } from '@/live';
 import { space } from '@/theme/tokens';
+import { ChipRow } from '@/ui/console';
 import { Button, Txt } from '@/ui/primitives';
 import { CenterSheet, ChoiceRow } from '@/ui/sheet';
 import type { RunFn } from './useConsoleLive';
@@ -171,6 +173,237 @@ export function TieSheet({ v, run, ask, onClose, mode }: SheetCtx & { mode: 'WIN
           />
         </>
       )}
+    </CenterSheet>
+  );
+}
+
+/** Loads once when the sheet opens; shows the error instead of the content when it fails. */
+function useLoad<T>(load: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    load().then((d) => { if (alive) setData(d); }, (e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return { data, error };
+}
+
+function Loading({ error }: { error: string | null }) {
+  return error ? <Txt v="body" color="alertText">{error}</Txt> : <Txt v="body" color="inkMuted">Loading…</Txt>;
+}
+
+const BAD = ['DISQUALIFIED', 'WITHDRAWN', 'NO_SHOW'];
+const perfName = (p: OptionsPerformance) => `${p.name} · Form ${p.formNo}${p.attempt > 1 ? ` · attempt ${p.attempt}` : ''}`;
+
+/** Penalties, restart, re-perform, disqualify and reinstate (web `moreModal`). */
+export function MoreSheet({ v, run, ask, onClose }: SheetCtx) {
+  const gameId = v.gameId;
+  const chief = v.role === 'CHIEF';
+  const { data: o, error } = useLoad(() => api.options(gameId ?? ''));
+  const [perfId, setPerfId] = useState<number | null>(null);
+  const [typeCode, setTypeCode] = useState<string | null>(null);
+  const [pick, setPick] = useState<'dq' | 'reinstate' | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (!gameId) return null;
+  if (!o) return <CenterSheet title="More actions" onClose={onClose}><Loading error={error} /></CenterSheet>;
+
+  const pk = o.kind === 'PK';
+  const live = o.performances.filter((p) => !BAD.includes(p.status));
+  const dq = o.performances.filter((p) => p.status === 'DISQUALIFIED');
+  const perf = live.find((p) => p.performanceId === perfId) ?? null;
+  const types = perf ? o.penaltyTypes[String(perf.ruleSetId)] ?? [] : [];
+  const type = types.find((t) => t.code === typeCode) ?? null;
+  const pens = o.performances.flatMap((p) => p.penalties.map((x) => ({ p, x })));
+  const formNo = o.formNo ?? live[0]?.formNo ?? v.formNo;
+  const rule = live[0] ? o.rules[String(live[0].ruleSetId)] ?? null : null;
+  const used = live.reduce((m, p) => Math.max(m, p.restartsUsed), 0);
+
+  if (pick) {
+    const list = pick === 'dq' ? live : dq;
+    const seen = new Set<number>();
+    const ents = list.filter((p) => !seen.has(p.entryId) && !!seen.add(p.entryId));
+    const choose = (entryId: number | null, name: string) => {
+      const dqing = pick === 'dq';
+      ask({
+        title: `${dqing ? 'Disqualify' : 'Reinstate'} ${name}?`,
+        text: dqing ? 'The athlete is disqualified from this game.' : 'The athlete is put back in the game.',
+        reason: 'Reason',
+        reasonRequired: true,
+        okLabel: dqing ? 'Disqualify' : 'Reinstate',
+        danger: dqing,
+        go: (reason) => void run(dqing ? 'Disqualify' : 'Reinstate', () => (dqing ? api.disqualify(gameId, entryId, reason) : api.reinstate(gameId, entryId, reason)), dqing ? 'Athlete disqualified' : 'Athlete reinstated'),
+      });
+    };
+    return (
+      <CenterSheet title={pick === 'dq' ? 'Disqualify whom?' : 'Reinstate whom?'} onClose={onClose}>
+        {ents.map((p) => <Button key={p.entryId} label={p.name} variant="secondary" block onPress={() => choose(p.entryId, p.name)} />)}
+        {ents.length > 1 ? <Button label="Everybody" variant="secondary" block onPress={() => choose(null, 'everybody')} /> : null}
+        <Button label="Back" variant="ghost" block onPress={() => setPick(null)} />
+      </CenterSheet>
+    );
+  }
+
+  const applyPenalty = () => {
+    if (!perf || !type) return;
+    ask({
+      title: `${type.label} −${type.value}`,
+      text: perfName(perf),
+      reason: 'Reason',
+      reasonRequired: type.requireReason,
+      okLabel: 'Apply penalty',
+      go: (reason) => void run('Penalty', () => api.penalty(gameId, perf.performanceId, type.code, reason), 'Penalty applied'),
+    });
+  };
+  const restart = () => {
+    if (rule && !rule.restartAllowed) { setMsg('A restart is not allowed in this game.'); return; }
+    const info = rule ? ` Restarts used ${used}/${rule.maxRestarts ?? '∞'}, penalty ${rule.restartPenalty ?? '0'}.` : '';
+    ask({
+      title: `Restart form ${formNo}?`,
+      text: `The form starts again.${info}`,
+      reason: 'Reason',
+      reasonRequired: true,
+      okLabel: 'Restart',
+      danger: true,
+      go: (reason) => void run('Restart', () => api.restart(gameId, 'RESTART', reason), (r) => ((r as ActionResult | undefined)?.outcome === 'DISQUALIFIED' ? 'Restart limit reached: disqualified' : 'Restarted')),
+    });
+  };
+  const reperform = () => ask({
+    title: `Re-perform form ${formNo}?`,
+    text: 'The athlete performs the form again, without a restart penalty.',
+    reason: 'Reason',
+    reasonRequired: true,
+    okLabel: 'Re-perform',
+    danger: true,
+    go: (reason) => void run('Re-perform', () => api.restart(gameId, 'REPERFORM', reason), 'Re-perform ordered'),
+  });
+
+  return (
+    <CenterSheet title="More actions" onClose={onClose}>
+      <Txt v="overline" color="inkMuted">Penalty</Txt>
+      {live.length ? (
+        <>
+          <Txt v="caption" color="inkMuted">Athlete</Txt>
+          {live.map((p) => <ChoiceRow key={p.performanceId} label={perfName(p)} on={perfId === p.performanceId} onPress={() => { setPerfId(p.performanceId); setTypeCode(null); }} />)}
+          {perf ? (
+            <>
+              <Txt v="caption" color="inkMuted">Type</Txt>
+              {types.length ? types.map((t) => {
+                const no = !chief && t.appliedBy === 'CHIEF';
+                return <ChoiceRow key={t.code} label={`${t.label} −${t.value}${no ? ' (chief only)' : ''}`} on={typeCode === t.code} disabled={no} onPress={() => setTypeCode(t.code)} />;
+              }) : <Txt v="body" color="inkMuted">No penalty types for this athlete.</Txt>}
+            </>
+          ) : null}
+          <Button label="Apply penalty" block disabled={!perf || !type} onPress={applyPenalty} />
+        </>
+      ) : <Txt v="body" color="inkMuted">No athlete can take a penalty now.</Txt>}
+
+      {pens.length ? (
+        <>
+          <Txt v="overline" color="inkMuted">Current penalties</Txt>
+          {pens.map(({ p, x }) => (
+            <Row key={x.penaltyId}>
+              <Txt v="body" style={{ flex: 1, minWidth: 200 }}>{`${p.name} · Form ${p.formNo} · ${x.label} −${x.value}${x.reason ? ` (${x.reason})` : ''}`}</Txt>
+              {chief ? (
+                <Button label="Remove" variant="danger" onPress={() => ask({
+                  title: 'Remove this penalty?',
+                  text: `${p.name} · ${x.label} −${x.value}`,
+                  reason: 'Reason',
+                  reasonRequired: true,
+                  okLabel: 'Remove',
+                  danger: true,
+                  go: (reason) => void run('Remove penalty', () => api.voidPenalty(x.penaltyId, reason), 'Penalty removed'),
+                })} />
+              ) : null}
+            </Row>
+          ))}
+        </>
+      ) : null}
+
+      {chief ? (
+        <>
+          <Txt v="overline" color="inkMuted">Restart and disqualification</Txt>
+          {msg ? <Txt v="body" color="alertText">{msg}</Txt> : null}
+          <Row>
+            <Button label="Restart" variant="secondary" onPress={restart} />
+            <Button label="Re-perform" variant="secondary" onPress={reperform} />
+            {!pk ? <Button label="Disqualify" variant="danger" disabled={!live.length} onPress={() => setPick('dq')} /> : null}
+            {!pk && dq.length ? <Button label="Reinstate" variant="secondary" onPress={() => setPick('reinstate')} /> : null}
+          </Row>
+          {pk ? <Txt v="caption" color="inkMuted">In a PK game use Walkover with Disqualified.</Txt> : null}
+        </>
+      ) : null}
+    </CenterSheet>
+  );
+}
+
+/** PK: choose the forms of this game (web `formsModal`). */
+export function FormsSheet({ v, run, ask, onClose }: SheetCtx) {
+  const gameId = v.gameId;
+  const { data: o, error } = useLoad(() => api.forms(gameId ?? ''));
+  const [sel, setSel] = useState<number[] | null>(null);
+  if (!gameId) return null;
+  if (!o) return <CenterSheet title="Forms of this game" onClose={onClose}><Loading error={error} /></CenterSheet>;
+  return <FormsBody o={o} gameId={gameId} run={run} ask={ask} onClose={onClose} sel={sel} setSel={setSel} />;
+}
+
+function FormsBody({ o, gameId, run, ask, onClose, sel, setSel }: { o: GameForms; gameId: string; run: SheetCtx['run']; ask: AskFn; onClose: () => void; sel: number[] | null; setSel: (s: number[]) => void }) {
+  const initial = o.forms.map((f) => o.available.find((a) => a.name === f.name)?.formId ?? 0);
+  const ids = sel ?? (initial.length ? initial : [0]);
+  const opts = o.available.map((a) => ({ value: String(a.formId), label: a.name }));
+  const set = (i: number, id: number) => setSel(ids.map((x, j) => (j === i ? id : x)));
+  return (
+    <CenterSheet title="Forms of this game" subtitle={o.locked ? 'The forms are locked: scoring has started.' : 'One form per round of this game.'} onClose={onClose}>
+      {ids.map((id, i) => (
+        <View key={i} style={{ gap: 4 }}>
+          <Txt v="label">Form {i + 1}</Txt>
+          {o.locked ? <Txt v="body" color="inkMuted">{o.available.find((a) => a.formId === id)?.name ?? o.forms[i]?.name ?? '–'}</Txt>
+            : <ChipRow value={String(id)} options={opts} onChange={(x) => set(i, Number(x))} />}
+        </View>
+      ))}
+      {!o.locked ? (
+        <>
+          <Row>
+            <Button label="Add a form" variant="secondary" disabled={ids.length >= 10} onPress={() => setSel([...ids, 0])} />
+            <Button label="Remove last" variant="secondary" disabled={ids.length <= 1} onPress={() => setSel(ids.slice(0, -1))} />
+          </Row>
+          <Button
+            label="Save forms"
+            block
+            disabled={ids.some((x) => !x)}
+            onPress={() => ask({
+              title: 'Save the forms of this game?',
+              reason: 'Reason (optional)',
+              okLabel: 'Save',
+              go: (reason) => void run('Forms', () => api.setForms(gameId, ids, reason), 'Forms saved'),
+            })}
+          />
+        </>
+      ) : null}
+    </CenterSheet>
+  );
+}
+
+const TV_MODES: { value: string; label: string }[] = [
+  { value: '', label: 'Follow the operator' },
+  { value: 'callup', label: 'Call-up' },
+  { value: 'clock', label: 'Clock' },
+  { value: 'result', label: 'Result' },
+];
+
+/** The new TV address, with an optional fixed view. No clipboard module is installed, so the text is selectable. */
+export function TvLinkSheet({ link, onClose }: { link: DisplayLink; onClose: () => void }) {
+  const [mode, setMode] = useState('');
+  const key = link.displayKey ?? link.key ?? '';
+  const url = `${baseUrl().replace(/\/api\/v1\/?$/, '')}/display/${key}?lang=${texts.lang()}${mode ? `&mode=${mode}` : ''}`;
+  return (
+    <CenterSheet title={`TV link · Ring ${link.ring}`} subtitle="Open this address in the TV browser." onClose={onClose}>
+      <Txt v="caption" color="inkMuted">Fixed view</Txt>
+      <ChipRow value={mode} options={TV_MODES} onChange={setMode} />
+      <Txt v="body" selectable style={{ fontSize: 14 }}>{url}</Txt>
+      <Txt v="caption" color="inkMuted">Press and hold the address to select and copy it. The old link no longer works.</Txt>
+      <Button label="Close" variant="secondary" block onPress={onClose} />
     </CenterSheet>
   );
 }

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Athlete, Corner, DisplayMode, QueueGame } from '@/api/types';
+import type { Athlete, Corner, DisplayLink, DisplayMode, QueueGame } from '@/api/types';
 import { useFreeOrientation } from '@/hooks/useFreeOrientation';
 import { api } from '@/live';
 import type { ConsoleView } from '@/live/consoleView';
@@ -17,7 +17,7 @@ import { Segmented, StepTrack } from '@/ui/officials';
 import { Button, Icon, Panel, Txt } from '@/ui/primitives';
 import { ActionSheet } from './ActionSheet';
 import { ActionsPanel, JudgeBoard, JudgeTiles, Provisional, TiePanel } from './panels';
-import { NoShowSheet, SeatSheet, TieSheet, WalkoverSheet, type Ask } from './sheets';
+import { FormsSheet, MoreSheet, NoShowSheet, SeatSheet, TieSheet, TvLinkSheet, WalkoverSheet, type Ask } from './sheets';
 import { useConsoleLive, type RunFn } from './useConsoleLive';
 
 export interface ConsoleBodyProps {
@@ -63,7 +63,8 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
   const [stopping, setStopping] = useState(false);
   const [seatNo, setSeatNo] = useState<number | null>(null);
   const [asking, setAsking] = useState<Ask | null>(null);
-  const [sheet, setSheet] = useState<'walkover' | 'noshow' | 'winner' | 'rematch' | null>(null);
+  const [sheet, setSheet] = useState<'walkover' | 'noshow' | 'winner' | 'rematch' | 'more' | 'forms' | null>(null);
+  const [tvLink, setTvLink] = useState<DisplayLink | null>(null);
   const ask = (a: Ask) => { setSeatNo(null); setSheet(null); setAsking(a); };
   const sheetCtx = { v, run, ask, onClose: () => setSheet(null) };
   const seatTile = seatNo != null ? v.seats.find((s) => s.seat === seatNo) ?? null : null;
@@ -143,15 +144,26 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
       {v.mode === 'game' ? (
         <>
           <TiePanel v={v} busy={busy} onWinner={() => setSheet('winner')} onRematch={() => setSheet('rematch')} />
-          <ActionsPanel v={v} run={run} ask={ask} busy={busy} onWalkover={() => setSheet('walkover')} onNoShow={() => setSheet('noshow')} />
+          <ActionsPanel v={v} run={run} ask={ask} busy={busy} onWalkover={() => setSheet('walkover')} onNoShow={() => setSheet('noshow')} onMore={() => setSheet('more')} onForms={() => setSheet('forms')} />
         </>
       ) : null}
-      {/* Task 8: more actions, PK forms, TV link. */}
       {v.mode === 'game' || v.mode === 'empty' ? (
         <Panel>
           <View style={{ gap: 6 }}>
             <Txt v="overline" color="inkMuted">Venue display</Txt>
             <Segmented value={v.display} options={DISPLAY} onChange={(mode) => run('Display', () => api.setDisplay(mode))} />
+            <Button
+              label="TV link"
+              icon="tv"
+              variant="secondary"
+              disabled={busy}
+              onPress={() => ask({
+                title: 'Create a new TV link?',
+                text: 'The old link stops working.',
+                okLabel: 'Create link',
+                go: () => void run('TV link', async () => { setTvLink(await api.displayLink()); }, 'TV link created'),
+              })}
+            />
           </View>
         </Panel>
       ) : null}
@@ -184,6 +196,9 @@ export function ConsoleBody({ v, run, busy, error, notice }: ConsoleBodyProps) {
       {sheet === 'walkover' ? <WalkoverSheet {...sheetCtx} /> : null}
       {sheet === 'noshow' ? <NoShowSheet {...sheetCtx} /> : null}
       {sheet === 'winner' || sheet === 'rematch' ? <TieSheet {...sheetCtx} mode={sheet === 'winner' ? 'WINNER' : 'REMATCH'} /> : null}
+      {sheet === 'more' ? <MoreSheet {...sheetCtx} /> : null}
+      {sheet === 'forms' ? <FormsSheet {...sheetCtx} /> : null}
+      {tvLink ? <TvLinkSheet link={tvLink} onClose={() => setTvLink(null)} /> : null}
       {asking ? (
         <ActionSheet
           title={asking.title}

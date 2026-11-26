@@ -168,9 +168,9 @@ export function Provisional({ v }: { v: ConsoleView }) {
   );
 }
 
-/** Release, declare, walkover, no-show (and later the more-actions buttons). */
-export function ActionsPanel({ v, run, ask, busy, onWalkover, onNoShow }: {
-  v: ConsoleView; run: RunFn; ask: AskFn; busy: boolean; onWalkover: () => void; onNoShow: () => void;
+/** Release, declare, walkover, no-show, forms and more actions. */
+export function ActionsPanel({ v, run, ask, busy, onWalkover, onNoShow, onMore, onForms }: {
+  v: ConsoleView; run: RunFn; ask: AskFn; busy: boolean; onWalkover: () => void; onNoShow: () => void; onMore: () => void; onForms: () => void;
 }) {
   const act = v.actions;
   const gameId = v.gameId;
@@ -197,7 +197,7 @@ export function ActionsPanel({ v, run, ask, busy, onWalkover, onNoShow }: {
     okLabel: 'Release',
     go: (reason) => void run('Release', () => api.release(gameId, reason), (r) => ((r as ActionResult | undefined)?.outcome === 'TIE_OPEN' ? 'Tie: the chief referee decides' : 'Released')),
   });
-  const other = act.walkover || act.noshow || act.release;
+  const other = act.walkover || act.noshow || act.release || act.more || act.forms;
   if (!act.declare && !other) return null;
   return (
     <Panel>
@@ -216,6 +216,8 @@ export function ActionsPanel({ v, run, ask, busy, onWalkover, onNoShow }: {
         {act.release ? <Button label={act.release.label} icon="check" disabled={busy} onPress={release} /> : null}
         {act.walkover ? <Button label={act.walkover.label} variant="secondary" disabled={busy} onPress={onWalkover} /> : null}
         {act.noshow ? <Button label={act.noshow.label} variant="secondary" disabled={busy} onPress={onNoShow} /> : null}
+        {act.forms ? <Button label={act.forms.label} variant="secondary" disabled={busy} onPress={onForms} /> : null}
+        {act.more ? <Button label={act.more.label} variant="secondary" icon="sliders" disabled={busy} onPress={onMore} /> : null}
       </View>
     </Panel>
   );
