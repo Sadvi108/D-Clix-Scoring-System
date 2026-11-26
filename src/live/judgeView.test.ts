@@ -142,3 +142,12 @@ test('freestyle total keys stay tappable until the items are set', () => {
   const done = buildJudgeView(input(freestyleCurrent, { sheet: freestyleSheet }, { SOLO: { ded: {}, items: { T_HJ: 0, T_JK: 0, T_TN: 0, T_CK: 0, T_AC: 0, T_BA: 0, P_CR: 0, P_HA: 0, P_EE: 0, P_MC: 0 } } }));
   assert.equal(done.chung?.can.FS_03, false);
 });
+
+test('UAT Freestyle sheet: accuracy-target keys stay tappable until the items are set', () => {
+  // As served by UAT on 2026-11-26: Freestyle deductions target ACCURACY (the technical part).
+  const [tech, pres] = freestyleSheet.sections;
+  const sheet = { ...freestyleSheet, sections: [{ ...tech, keys: tech.keys.map((k) => ({ ...k, target: 'ACCURACY' as const })) }, pres] as typeof freestyleSheet.sections };
+  assert.equal(buildJudgeView(input(freestyleCurrent, { sheet })).chung?.can.FS_03, true);
+  const all = { T_HJ: 0, T_JK: 0, T_TN: 0, T_CK: 0, T_AC: 0, T_BA: 0, P_CR: 1, P_HA: 1, P_EE: 1, P_MC: 1 };
+  assert.equal(buildJudgeView(input(freestyleCurrent, { sheet }, { SOLO: { ded: {}, items: all } })).chung?.can.FS_03, false);
+});

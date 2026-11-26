@@ -60,10 +60,11 @@ export interface JudgeViewInput {
 
 export const sideOf = (c: Corner): Side => (c === 'RED' ? 'hong' : 'chung');
 
-function canTap(k: SheetKey, c: Calc | null) {
+function canTap(k: SheetKey, c: Calc | null, hasTech: boolean) {
   if (!c) return true;
-  // Freestyle keys take from the total; until the items are set the total reads 0, so stay open.
-  if ((k.target === 'TOTAL' || k.target === 'PRESENTATION') && !c.ok) return true;
+  // Until every item is set the part a key takes from may still read 0 (Freestyle technical items,
+  // presentation, total), so the key stays open; the calculation never goes below 0.
+  if ((hasTech || k.target === 'TOTAL' || k.target === 'PRESENTATION') && !c.ok) return true;
   const room = k.target === 'PRESENTATION' ? c.pres : k.target === 'TOTAL' ? c.tot : c.acc;
   return room >= Math.abs(k.value) - 1e-9;
 }
@@ -83,7 +84,7 @@ export function buildJudgeView(i: JudgeViewInput): JudgeView {
       athlete: { entryId: String(a.entryId), name: a.name, nat: a.team ?? '', members: a.members },
       local,
       calc: cl,
-      can: Object.fromEntries(sorted.map((k) => [k.code, canTap(k, cl)])),
+      can: Object.fromEntries(sorted.map((k) => [k.code, canTap(k, cl, (i.sheet?.sections[0]?.items?.length ?? 0) > 0)])),
     };
   };
   const chung = cur ? side(cur.athletes.some((a) => a.corner === 'BLUE') ? 'BLUE' : 'SOLO') : null;

@@ -124,7 +124,9 @@ export function ScoringFreestyle({ j }: { j: JudgeModel }) {
             {items2}
           </>
         )}
-        <Txt v="caption" color="inkMuted">Draft items. Tap a score to open the number grid. −0.3 / −0.1 come off the total. Time and boundary penalties are applied by the referee.</Txt>
+        <Txt v="caption" color="inkMuted">
+          Tap a score to open the number grid. Deductions come off {(j.view.keys.major ?? j.view.keys.minor)?.target === 'TOTAL' ? 'the total' : (j.view.keys.major ?? j.view.keys.minor)?.target === 'PRESENTATION' ? j.sheet.sections[1].label : j.sheet.sections[0].label}. Time and boundary penalties are applied by the referee.
+        </Txt>
       </ScrollView>
 
       {v.sendError && sendState === 'failed' ? (
