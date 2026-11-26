@@ -2,7 +2,7 @@
   "expo": {
     "name": "D-Clix Scoring System",
     "slug": "dclix-scoring-system",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -25,7 +25,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.example.dclixscoring"
+      "package": "com.example.dclixscoring",
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
